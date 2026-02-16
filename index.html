@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ders Asistanı PRO V7 - Matris & Güvenlik</title>
+    <title>Ders Asistanı PRO V7 - Yönetim Paneli</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -21,9 +21,10 @@
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
         .toast-notification {
             position: fixed;
@@ -37,11 +38,16 @@
 
         /* Offline State */
         .student-offline { filter: grayscale(100%); opacity: 0.6; border-color: #ef4444 !important; }
+
+        /* Table Styles */
+        .excel-table th { position: sticky; top: 0; background: #1e293b; z-index: 10; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; padding: 1rem; text-align: left; }
+        .excel-table td { padding: 0.75rem 1rem; border-bottom: 1px solid #1e293b; font-size: 0.875rem; color: #cbd5e1; }
+        .excel-table tr:hover { background: rgba(99, 102, 241, 0.05); }
     </style>
 </head>
 <body>
 
-<div id="app" class="min-h-screen flex flex-col p-4 md:p-8 transition-all duration-300" :class="{'!p-2': isWidgetMode}">
+<div id="app" class="min-h-screen flex flex-col p-4 md:p-8">
 
     <!-- Notifications Toast -->
     <div v-if="notification.show" class="toast-notification animate__animated animate__fadeInUp">
@@ -87,163 +93,167 @@
     </div>
 
     <!-- TEACHER DASHBOARD -->
-    <div v-if="view === 'teacher-dashboard'" class="flex-1 flex flex-col w-full animate__animated animate__fadeIn" :class="isWidgetMode ? 'max-w-full h-screen overflow-hidden' : 'max-w-7xl mx-auto'">
+    <div v-if="view === 'teacher-dashboard'" class="flex-1 flex flex-col max-w-[1600px] mx-auto w-full animate__animated animate__fadeIn">
         
-        <!-- === WIDGET MODE UI === -->
-        <div v-if="isWidgetMode" class="flex flex-col h-full gap-2">
-            <div class="flex justify-between items-center bg-slate-900/90 p-2 rounded-lg backdrop-blur border border-slate-800">
-               <button @click="isWidgetMode = false" class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition">
-                   <span>↖</span> Genişlet
-               </button>
-               <div class="text-[10px] font-bold text-slate-300 truncate max-w-[100px]">{{ actionInputs.activityName }}</div>
+        <!-- Header -->
+        <header class="flex flex-wrap justify-between items-center gap-4 mb-6">
+            <div>
+                <h1 class="text-3xl font-black">{{ classInfo.name }}</h1>
+                <div class="flex items-center gap-4 mt-2">
+                    <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-bold border border-indigo-500/20">ID: {{ myPeerId }}</span>
+                    <span class="flex items-center gap-2 text-xs text-slate-400">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        {{ connectedStudents.filter(s => s.isOnline).length }} Online / {{ connectedStudents.length }} Toplam
+                    </span>
+                </div>
             </div>
-
-            <div v-if="timer > 0" class="px-1">
-               <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                   <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
-               </div>
+            <div class="flex gap-2">
+                <button @click="showSettings = true" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">⚙️ Ayarlar</button>
+                <button @click="copyInviteLink" class="bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl font-bold text-sm border border-slate-700 transition">🔗 Link Paylaş</button>
             </div>
+        </header>
 
-            <div class="grid grid-cols-4 gap-1">
-               <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Parola Sor">🔑</button>
-               <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="bg-emerald-600 hover:bg-emerald-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Test (A-D)">📝</button>
-               <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="bg-blue-600 hover:bg-blue-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Yoklama">📢</button>
-               <button @click="resetStudentScreens" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-lg text-slate-300 transition shadow flex items-center justify-center" title="Sıfırla">🔄</button>
-            </div>
-
-            <div class="flex-1 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-slate-800/50">
-               <div class="flex flex-wrap gap-1 content-start">
-                   <div v-for="student in connectedStudents" :key="student.id" 
-                        class="w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold cursor-help relative group transition-all shadow-sm"
-                        :class="[
-                           studentClass(student),
-                           !student.isOnline ? 'student-offline' : ''
-                        ]">
-                       
-                       <!-- Offline/Online Dot -->
-                       <div class="absolute -top-1 -left-1 w-2 h-2 rounded-full border border-slate-900" 
-                            :class="student.isOnline ? 'bg-green-500' : 'bg-red-500'"></div>
-
-                       {{ student.name.substring(0,1).toUpperCase() }}
-                   </div>
-               </div>
-            </div>
-        </div>
-
-        <!-- === NORMAL MODE UI === -->
-        <div v-else class="flex flex-col h-full">
-            <header class="flex flex-wrap justify-between items-center gap-4 mb-8">
-                <div>
-                    <h1 class="text-3xl font-black">{{ classInfo.name }}</h1>
-                    <div class="flex items-center gap-4 mt-2">
-                        <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-bold border border-indigo-500/20">ID: {{ myPeerId }}</span>
-                        <span class="flex items-center gap-2 text-xs text-slate-400">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            {{ connectedStudents.filter(s => s.isOnline).length }} Online / {{ connectedStudents.length }} Toplam
-                        </span>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 h-[calc(100vh-140px)]">
+            
+            <!-- Left Sidebar: Controls -->
+            <div class="lg:col-span-3 space-y-4 overflow-y-auto pr-2">
+                
+                <!-- Timer Display -->
+                <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
+                    <div class="text-center">
+                        <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
+                        <div class="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Saniye Kaldı</div>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full mt-4 overflow-hidden">
+                        <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
                     </div>
                 </div>
-                <div class="flex gap-2">
-                    <button @click="isWidgetMode = true" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl border border-indigo-500 transition shadow-lg flex items-center gap-2 font-bold text-sm">
-                        📱 <span class="hidden sm:inline">Widget Modu</span>
+
+                <!-- Activity Control -->
+                <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
+                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Etkinlik Başlat</h3>
+                    <div class="space-y-3">
+                        <div class="relative">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Etkinlik Adı (Sütun)</label>
+                            <input v-model="actionInputs.activityName" type="text" placeholder="Örn: Soru 1" 
+                                   class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none font-bold text-white">
+                        </div>
+                        
+                        <div class="relative">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Parola (Varsa)</label>
+                            <input v-model="actionInputs.password" type="text" placeholder="Örn: 1453" 
+                                   class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
+                        </div>
+
+                        <div class="flex gap-2 pt-2">
+                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
+                            <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="glass-panel p-6 rounded-3xl">
+                    <div class="grid grid-cols-1 gap-2">
+                        <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
+                        <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
+                    </div>
+                </div>
+
+                <!-- Live Stats (Small) -->
+                <div class="glass-panel p-6 rounded-3xl">
+                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-3">Anlık Durum</h3>
+                    <div class="space-y-2 text-sm font-bold">
+                         <div class="flex justify-between"><span class="text-emerald-400">Doğru:</span> <span>{{ stats.correct }}</span></div>
+                         <div class="flex justify-between"><span class="text-rose-400">Yanlış:</span> <span>{{ stats.wrong }}</span></div>
+                         <div class="flex justify-between"><span class="text-amber-500">Zaman Aşımı:</span> <span>{{ stats.timeout }}</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Main Content (Tabs) -->
+            <div class="lg:col-span-9 glass-panel rounded-3xl flex flex-col overflow-hidden">
+                <!-- Tabs Header -->
+                <div class="flex border-b border-slate-700 bg-slate-900/50">
+                    <button @click="activeTab = 'live'" 
+                            class="px-6 py-4 text-sm font-bold transition-colors flex items-center gap-2"
+                            :class="activeTab === 'live' ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-white'">
+                        📡 Canlı Sınıf ({{ connectedStudents.length }})
                     </button>
-                    <button @click="showSettings = true" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">⚙️</button>
-                    <button @click="copyInviteLink" class="bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl font-bold text-sm border border-slate-700 transition">🔗 Paylaş</button>
+                    <button @click="activeTab = 'excel'; fetchReport()" 
+                            class="px-6 py-4 text-sm font-bold transition-colors flex items-center gap-2"
+                            :class="activeTab === 'excel' ? 'text-green-400 border-b-2 border-green-500 bg-green-500/10' : 'text-slate-400 hover:text-white'">
+                        📋 Excel Listesi
+                    </button>
                 </div>
-            </header>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-                <div class="lg:col-span-3 space-y-4">
-                    <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
-                        <div class="text-center">
-                            <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
-                            <div class="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Saniye Kaldı</div>
-                        </div>
-                        <div class="w-full bg-slate-800 h-2 rounded-full mt-4 overflow-hidden">
-                            <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
-                        </div>
+                <!-- Tab Content: Live Class -->
+                <div v-if="activeTab === 'live'" class="flex-1 overflow-y-auto p-6">
+                    <div v-if="connectedStudents.length === 0" class="h-full flex flex-col items-center justify-center text-slate-600">
+                        <div class="text-6xl mb-4 opacity-20">📡</div>
+                        <p>Henüz öğrenci bağlanmadı.</p>
                     </div>
-
-                    <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
-                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Etkinlik Detayları</h3>
-                        <div class="space-y-3">
-                            <!-- ETKİNLİK ADI INPUTU -->
-                            <div class="relative">
-                                <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Etkinlik Adı (Excel Sütunu)</label>
-                                <input v-model="actionInputs.activityName" type="text" placeholder="Örn: Soru 1" 
-                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none font-bold text-white">
-                            </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                        <div v-for="student in connectedStudents" :key="student.id" 
+                             class="student-card p-4 rounded-2xl border relative overflow-hidden group"
+                             :class="[
+                                studentClass(student),
+                                !student.isOnline ? 'student-offline' : ''
+                             ]">
                             
-                            <div class="relative">
-                                <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Parola (Varsa)</label>
-                                <input v-model="actionInputs.password" type="text" placeholder="Örn: 1453" 
-                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
-                            </div>
+                            <!-- Connection Status -->
+                            <div class="absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-slate-900 transition-colors duration-300 shadow-sm z-20"
+                                 :class="student.isOnline ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'"></div>
 
-                            <div class="flex gap-2 pt-2">
-                                <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
-                                <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
-                            </div>
-                        </div>
-                    </div>
+                            <div v-if="student.handRaised && student.isOnline" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
 
-                    <div class="glass-panel p-6 rounded-3xl">
-                        <div class="grid grid-cols-1 gap-2">
-                            <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
-                            <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="lg:col-span-9 glass-panel rounded-3xl flex flex-col overflow-hidden">
-                    <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
-                        <span class="text-sm font-bold text-slate-400 uppercase">Sınıf Listesi ({{ connectedStudents.length }})</span>
-                        <div class="flex gap-4 text-xs font-bold">
-                            <span class="text-emerald-400">Doğru: {{ stats.correct }}</span>
-                            <span class="text-rose-400">Yanlış: {{ stats.wrong }}</span>
-                            <span class="text-amber-500">Zaman Aşımı: {{ stats.timeout }}</span>
-                        </div>
-                    </div>
-
-                    <div class="p-6 overflow-y-auto flex-1">
-                        <div v-if="connectedStudents.length === 0" class="h-full flex flex-col items-center justify-center text-slate-600">
-                            <div class="text-6xl mb-4 opacity-20">📡</div>
-                            <p>Öğrenci bekleniyor...</p>
-                        </div>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                            <div v-for="student in connectedStudents" :key="student.id" 
-                                 class="student-card p-4 rounded-2xl border relative overflow-hidden group"
-                                 :class="[
-                                    studentClass(student),
-                                    !student.isOnline ? 'student-offline' : ''
-                                 ]">
-                                
-                                <!-- Connection Status Indicator -->
-                                <div class="absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-slate-900 transition-colors duration-300 shadow-sm z-20"
-                                     :class="student.isOnline ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'"></div>
-
-                                <div v-if="student.handRaised && student.isOnline" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
-
-                                <div class="text-xs font-bold truncate pr-6">{{ student.name }}</div>
-                                <div class="text-[10px] text-slate-500 font-mono mb-2">{{ student.number }}</div>
-                                
-                                <div class="text-[10px] font-black uppercase mt-auto">
-                                    <span v-if="!student.isOnline" class="text-red-400">🔴 OFFLINE</span>
-                                    <span v-else-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
-                                    <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
-                                    <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
-                                    <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
-                                    <span v-else class="opacity-20">BEKLEMEDE</span>
-                                </div>
+                            <div class="text-xs font-bold truncate pr-6">{{ student.name }}</div>
+                            <div class="text-[10px] text-slate-500 font-mono mb-2">{{ student.number }}</div>
+                            
+                            <div class="text-[10px] font-black uppercase mt-auto">
+                                <span v-if="!student.isOnline" class="text-red-400">🔴 OFFLINE</span>
+                                <span v-else-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
+                                <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
+                                <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
+                                <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
+                                <span v-else class="opacity-20">BEKLEMEDE</span>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Tab Content: Excel List -->
+                <div v-if="activeTab === 'excel'" class="flex-1 overflow-y-auto p-0 bg-slate-900">
+                    <div v-if="isFetchingReport" class="flex justify-center items-center h-full text-slate-500">
+                        <div class="w-8 h-8 border-4 border-slate-600 border-t-emerald-500 rounded-full animate-spin mr-3"></div>
+                        Yükleniyor...
+                    </div>
+                    <div v-else-if="reportData.length > 0">
+                         <table class="w-full text-left border-collapse excel-table">
+                            <thead>
+                                <tr>
+                                    <th v-for="(header, index) in reportData[0]" :key="index">{{ header }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(row, rowIndex) in reportData.slice(1)" :key="rowIndex">
+                                    <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="flex flex-col items-center justify-center h-full text-slate-500">
+                        <div class="text-4xl mb-2">📂</div>
+                        <p>Veri yok veya Excel bağlı değil.</p>
+                        <button @click="fetchReport" class="mt-4 text-emerald-500 text-sm hover:underline">Tekrar Dene</button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
-    <!-- STUDENT LOGIN / ROOM (Değişmedi, sadece logic güncellendi) -->
+    <!-- STUDENT VIEW (Login & Room) -->
     <div v-if="view === 'student-login'" class="flex-1 flex items-center justify-center animate__animated animate__fadeIn">
         <div class="glass-panel p-8 rounded-3xl w-full max-w-md">
             <h2 class="text-2xl font-bold mb-6 text-center">Derse Katıl</h2>
@@ -323,6 +333,7 @@
     <div v-if="showSettings" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
         <div class="glass-panel p-8 rounded-3xl max-w-md w-full border border-slate-700">
             <h2 class="text-2xl font-bold mb-2">Ayarlar</h2>
+            <p class="text-sm text-slate-500 mb-6">Apps Script URL'sini girin:</p>
             <input v-model="sheetConfig.inputUrl" type="text" placeholder="https://script.google.com/macros/s/..." 
                    class="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-xs font-mono outline-none focus:border-indigo-500 mb-6">
             <div class="flex gap-2">
@@ -343,8 +354,10 @@
             const myPeerId = ref('');
             const isBroadcasting = ref(false);
             const urlRoomId = ref('');
-            const isWidgetMode = ref(false);
-
+            
+            // TABS STATE
+            const activeTab = ref('live'); // 'live' or 'excel'
+            
             // TIMER LOGIC
             const timer = ref(0);
             let timerInterval = null;
@@ -359,12 +372,15 @@
             // Teacher Data
             const classInfo = ref({ name: '' });
             const connectedStudents = ref([]);
-            // Added activityName to inputs
             const actionInputs = ref({ password: '', activityName: 'Soru 1' });
             const activeSecret = ref('');
             const activeActionType = ref('');
             const showSettings = ref(false);
             const sheetConfig = ref({ url: '', inputUrl: '' });
+            
+            // REPORT DATA
+            const reportData = ref([]);
+            const isFetchingReport = ref(false);
 
             // Student Data
             const studentForm = ref({ name: '', number: '', roomId: '' });
@@ -402,9 +418,7 @@
                     peer.value.on('connection', (conn) => {
                         conn.on('data', (data) => handleIncomingData(conn, data));
                         
-                        // CONNECTION DROP LOGIC
                         conn.on('close', () => {
-                             // Find student and mark offline instead of removing
                              const student = connectedStudents.value.find(s => s.id === conn.peer);
                              if(student) {
                                  student.isOnline = false;
@@ -422,29 +436,23 @@
 
             const handleIncomingData = (conn, data) => {
                 if (data.type === 'JOIN') {
-                    // DUPLICATE CHECK
                     const existingStudent = connectedStudents.value.find(s => s.number === data.payload.number);
                     
                     if (existingStudent) {
                         if (existingStudent.isOnline) {
-                            // If someone is already online with this number, reject new connection
                             conn.send({ type: 'FEEDBACK', success: false, msg: 'BU NUMARA ZATEN BAĞLI!' });
                             setTimeout(() => conn.close(), 1000);
                             return;
                         } else {
-                            // If student was offline, allow reconnect and update ID
                             existingStudent.isOnline = true;
                             existingStudent.id = conn.peer;
                             existingStudent.conn = conn;
-                            existingStudent.name = data.payload.name; // Update name just in case
-                            
-                            // Re-bind close event to new connection
+                            existingStudent.name = data.payload.name;
                             conn.on('close', () => { existingStudent.isOnline = false; });
                             return;
                         }
                     }
 
-                    // New Student
                     connectedStudents.value.push({
                         id: conn.peer, 
                         name: data.payload.name, 
@@ -506,7 +514,7 @@
                         }
                         logToSheet({
                             name: s.name, number: s.number,
-                            action: actionInputs.value.activityName, // Use Activity Name
+                            action: actionInputs.value.activityName, 
                             detail: 'ZAMAN AŞIMI', result: 'GİRMEDİ'
                         });
                     }
@@ -515,9 +523,7 @@
                 setTimeout(() => {
                    broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
                    notify("Süre doldu, sonuçlar kaydedildi.");
-                   
-                   // Auto increment activity name? Optional
-                   // actionInputs.value.activityName = incrementName(actionInputs.value.activityName);
+                   // Otomatik yenileme isterseniz buraya fetchReport() ekleyebilirsiniz
                 }, 2000);
             };
 
@@ -535,7 +541,7 @@
                 
                 logToSheet({
                     name: student.name, number: student.number,
-                    action: actionInputs.value.activityName, // Use Activity Name
+                    action: actionInputs.value.activityName,
                     detail: answer, result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
                 });
             };
@@ -546,6 +552,28 @@
                     if(s.conn && s.conn.open) s.conn.send(msg);
                 });
                 setTimeout(() => { isBroadcasting.value = false; }, 500);
+            };
+
+            // --- REPORT FETCHING ---
+            const fetchReport = async () => {
+                if (!sheetConfig.value.url) return;
+                
+                isFetchingReport.value = true;
+                reportData.value = [];
+                
+                try {
+                    const url = `${sheetConfig.value.url}?sinifAdi=${encodeURIComponent(classInfo.value.name)}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if(data.error) notify(data.error, "error");
+                    else reportData.value = data;
+                } catch (e) {
+                    console.error("Rapor Hatası:", e);
+                    notify("Excel verisi çekilemedi. Ayarları kontrol edin.", "error");
+                } finally {
+                    isFetchingReport.value = false;
+                }
             };
 
             // --- STUDENT SIDE ---
@@ -587,16 +615,10 @@
                             }
                         });
                         
-                        // Handle server disconnect on student side
-                        conn.on('close', () => {
-                            notify("Bağlantı kesildi! Sayfayı yenileyin.", "error");
-                        });
+                        conn.on('close', () => { notify("Bağlantı kesildi! Sayfayı yenileyin.", "error"); });
                     });
 
-                    conn.on('error', () => {
-                        isConnecting.value = false;
-                        notify("Hocaya bağlanılamadı.", "error");
-                    });
+                    conn.on('error', () => { isConnecting.value = false; notify("Hocaya bağlanılamadı.", "error"); });
                 });
             };
 
@@ -660,7 +682,7 @@
                 formData.append('sinifAdi', classInfo.value.name);
                 formData.append('ogrenciAd', data.name);
                 formData.append('ogrenciNo', data.number);
-                formData.append('islem', data.action); // Now sends Activity Name
+                formData.append('islem', data.action);
                 formData.append('detay', data.detail);
                 formData.append('sonuc', data.result);
                 fetch(sheetConfig.value.url, { method: 'POST', body: formData, mode: 'no-cors' });
@@ -677,7 +699,7 @@
                 saveSettings, copyInviteLink, studentForm, isConnecting, joinClass,
                 currentMode, studentInput, notifyTyping, submitAnswer, feedback,
                 raiseHand, handCooldown, resetStudentScreens, urlRoomId,
-                notification, timer, isWidgetMode
+                notification, timer, activeTab, fetchReport, reportData, isFetchingReport
             };
         }
     }).mount('#app');
