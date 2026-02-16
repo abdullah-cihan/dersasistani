@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ders Asistanı PRO V4 - Excel Bağlantılı</title>
+    
+    <!-- Kütüphaneler -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #0f172a; color: #fff; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-primary { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); transition: all 0.3s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(99, 102, 241, 0.5); }
+        
+        /* Loading Spinner */
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #6366f1; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+
+    <!-- AÇILIŞ EKRANI -->
+    <div v-if="view === 'landing'" class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 animate__animated animate__fadeIn">
+        
+        <!-- Öğretmen Girişi -->
+        <div class="glass-panel p-8 rounded-2xl flex flex-col items-center text-center hover:border-indigo-500 transition cursor-pointer group" @click="setupTeacher">
+            <div class="text-6xl mb-4 group-hover:scale-110 transition">👨‍🏫</div>
+            <h2 class="text-2xl font-bold mb-2">Öğretmen Girişi</h2>
+            <p class="text-slate-400 text-sm">Ders yönetimi ve Excel kaydı.</p>
+            <button class="mt-6 px-6 py-2 bg-slate-700 rounded-full text-sm group-hover:bg-indigo-600 transition">Panel Aç</button>
+        </div>
+
+        <!-- Öğrenci Girişi -->
+        <div class="glass-panel p-8 rounded-2xl flex flex-col items-center text-center hover:border-green-500 transition cursor-pointer group" @click="view = 'student-login'">
+            <div class="text-6xl mb-4 group-hover:scale-110 transition">🎓</div>
+            <h2 class="text-2xl font-bold mb-2">Öğrenci Girişi</h2>
+            <p class="text-slate-400 text-sm">Derse katıl ve puan topla.</p>
+            <button class="mt-6 px-6 py-2 bg-slate-700 rounded-full text-sm group-hover:bg-green-600 transition">Derse Katıl</button>
+        </div>
+    </div>
+
+
+    <!-- ================= ÖĞRETMEN PANELİ ================= -->
+    <div v-if="view === 'teacher-dashboard'" class="w-full max-w-5xl animate__animated animate__fadeIn">
+        
+        <!-- Üst Bar -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-indigo-400">Ders Yönetim Paneli</h1>
+                <p class="text-slate-400 text-sm flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full" :class="sheetConfig.url ? 'bg-green-500' : 'bg-red-500'"></span>
+                    {{ sheetConfig.url ? 'Excel Bağlı' : 'Excel Bağlı Değil' }}
+                </p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="showSettings = true" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
+                    ⚙️ Excel Ayarları
+                </button>
+                <button @click="copyInviteLink" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2">
+                    🔗 Linki Paylaş
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Sol: Kontrol Merkezi -->
+            <div class="glass-panel p-6 rounded-2xl lg:col-span-1 h-fit">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4 tracking-wider">CANLI ETKİLEŞİM</h3>
+                
+                <div class="space-y-3">
+                    <div class="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                        <label class="text-xs text-indigo-300 block mb-1">🔑 Şifreli Soru</label>
+                        <input v-model="actionInputs.password" type="text" placeholder="Cevap (Örn: ANKARA)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm mb-2 focus:border-indigo-500 outline-none uppercase">
+                        <button @click="triggerAction('PASSWORD')" :disabled="!actionInputs.password" class="w-full btn-primary py-2 rounded text-sm font-bold">
+                            Soruyu Gönder
+                        </button>
+                    </div>
+
+                    <div class="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                        <label class="text-xs text-green-300 block mb-1">✋ Hızlı Yoklama</label>
+                        <button @click="triggerAction('ROLLCALL')" class="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded text-sm font-bold transition">
+                            Yoklama Başlat
+                        </button>
+                    </div>
+
+                    <button @click="resetStudentScreens" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 rounded text-sm">
+                        Ekranları Temizle
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sağ: Canlı Akış -->
+            <div class="glass-panel p-6 rounded-2xl lg:col-span-2 flex flex-col h-[500px]">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">BAĞLI ÖĞRENCİLER ({{ connectedStudents.length }})</h3>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto content-start grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div v-for="student in connectedStudents" :key="student.id" 
+                         class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex flex-col justify-between relative overflow-hidden transition-all duration-300"
+                         :class="{'border-green-500 bg-green-900/20': student.status === 'success', 'border-red-500 bg-red-900/20': student.status === 'fail'}">
+                        
+                        <div>
+                            <div class="font-bold text-sm truncate">{{ student.name }}</div>
+                            <div class="text-[10px] text-slate-400">{{ student.number }}</div>
+                        </div>
+
+                        <div class="mt-2 text-xs font-mono text-right">
+                            <span v-if="student.status === 'idle'" class="text-slate-500">...</span>
+                            <span v-if="student.status === 'success'" class="text-green-400 font-bold">✔ DOĞRU</span>
+                            <span v-if="student.status === 'fail'" class="text-red-400 font-bold">✖ YANLIŞ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ayarlar Modalı (Excel URL Girişi) -->
+    <div v-if="showSettings" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="glass-panel p-8 rounded-2xl max-w-lg w-full">
+            <h2 class="text-2xl font-bold mb-4">Google Sheets Bağlantısı</h2>
+            <p class="text-sm text-slate-300 mb-4">
+                Öğrenci verilerini kendi tablonuza kaydetmek için "Google Apps Script Web App URL" adresinizi yapıştırın.
+            </p>
+            
+            <input v-model="sheetConfig.inputUrl" type="text" placeholder="https://script.google.com/macros/s/..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm mb-4 text-white focus:border-indigo-500 outline-none">
+            
+            <div class="flex justify-end gap-3">
+                <button @click="showSettings = false" class="text-slate-400 hover:text-white text-sm">İptal</button>
+                <button @click="saveSettings" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg text-sm font-bold">Kaydet</button>
+            </div>
+            
+            <div class="mt-4 p-3 bg-indigo-900/30 rounded border border-indigo-500/30 text-xs text-indigo-300">
+                <span class="font-bold">Nasıl Yapılır?</span><br>
+                1. Google Sheets açın > Uzantılar > Apps Script.<br>
+                2. Size verilen kodu yapıştırın.<br>
+                3. Dağıt > Yeni Dağıtım > "Herkes" erişebilir seçin.<br>
+                4. Verilen URL'yi buraya yapıştırın.
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================= ÖĞRENCİ PANELİ ================= -->
+    <!-- (Öğrenci tarafı önceki versiyonla aynı, sadeleştirildi) -->
+    <div v-if="view === 'student-login'" class="w-full max-w-md animate__animated animate__fadeIn">
+        <div class="glass-panel p-8 rounded-2xl text-center">
+            <h2 class="text-2xl font-bold mb-6">Giriş Yap</h2>
+            <input v-model="studentForm.name" type="text" placeholder="Ad Soyad" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 mb-3 text-white">
+            <input v-model="studentForm.number" type="text" placeholder="Numara" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 mb-3 text-white">
+            <input v-model="studentForm.roomId" type="text" placeholder="Ders Kodu" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 mb-6 text-white text-center font-mono">
+            <button @click="joinClass" :disabled="isConnecting" class="w-full btn-primary py-3 rounded-lg font-bold">Derse Katıl</button>
+            <button @click="view = 'landing'" class="mt-4 text-xs text-slate-500">Geri Dön</button>
+        </div>
+    </div>
+
+    <div v-if="view === 'student-room'" class="w-full max-w-md h-full flex flex-col animate__animated animate__fadeIn">
+        <div class="glass-panel p-4 rounded-xl mb-6 flex justify-between items-center">
+            <div><div class="font-bold">{{ studentForm.name }}</div></div>
+            <div class="flex items-center gap-2"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div><div class="text-xs text-green-400">BAĞLI</div></div>
+        </div>
+
+        <div class="flex-1 glass-panel rounded-2xl p-6 flex flex-col items-center justify-center relative overflow-hidden">
+            <div v-if="currentMode === 'IDLE'" class="text-center">
+                <div class="text-5xl mb-4 opacity-50">📡</div>
+                <h3 class="font-bold">Bekleniyor...</h3>
+            </div>
+
+            <div v-if="currentMode === 'PASSWORD'" class="w-full text-center animate__animated animate__bounceIn">
+                <h3 class="text-xl font-bold mb-4 text-indigo-400">Cevabı Girin</h3>
+                <input v-model="studentInput" type="text" class="w-full bg-slate-900 border border-indigo-500 rounded-lg p-4 text-center text-xl uppercase mb-4 text-white" placeholder="...">
+                <button @click="submitAnswer" class="w-full btn-primary py-3 rounded-lg font-bold">Gönder</button>
+            </div>
+
+            <div v-if="currentMode === 'ROLLCALL'" class="w-full text-center animate__animated animate__tada">
+                <h3 class="text-2xl font-bold mb-6 text-green-400">YOKLAMA!</h3>
+                <button @click="submitAnswer('BURADAYIM')" class="w-40 h-40 rounded-full bg-green-600 hover:bg-green-500 border-4 border-green-400 shadow-xl flex items-center justify-center text-xl font-bold mx-auto transition transform active:scale-95">
+                    BURADAYIM
+                </button>
+            </div>
+
+            <div v-if="feedbackMessage" class="absolute inset-0 bg-slate-900/95 z-10 flex flex-col items-center justify-center">
+                <div class="text-5xl mb-4">{{ feedbackType === 'success' ? '🎉' : '❌' }}</div>
+                <h3 class="text-xl font-bold" :class="feedbackType === 'success' ? 'text-green-400' : 'text-red-400'">{{ feedbackMessage }}</h3>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, ref, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            // General State
+            const view = ref('landing');
+            const peer = ref(null);
+            const myPeerId = ref('');
+            
+            // Teacher State
+            const connectedStudents = ref([]);
+            const actionInputs = ref({ password: '' });
+            const activeSecret = ref('');
+            const activeActionName = ref('');
+            
+            // Excel Config
+            const showSettings = ref(false);
+            const sheetConfig = ref({ url: '', inputUrl: '' });
+
+            // Student State
+            const studentForm = ref({ name: '', number: '', roomId: '' });
+            const currentMode = ref('IDLE');
+            const studentInput = ref('');
+            const feedbackMessage = ref('');
+            const feedbackType = ref('');
+            const isConnecting = ref(false);
+
+            onMounted(() => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const room = urlParams.get('room');
+                if (room) { studentForm.value.roomId = room; view.value = 'student-login'; }
+                
+                // Load Excel Config
+                const savedUrl = localStorage.getItem('sheetUrl');
+                if(savedUrl) { sheetConfig.value.url = savedUrl; sheetConfig.value.inputUrl = savedUrl; }
+            });
+
+            // --- EXCEL LOGGING FUNCTION ---
+            const logToSheet = (data) => {
+                if (!sheetConfig.value.url) return;
+                
+                const formData = new FormData();
+                formData.append('tarih', new Date().toLocaleString());
+                formData.append('ogrenciAd', data.name);
+                formData.append('ogrenciNo', data.number);
+                formData.append('islem', data.action); // JOIN, ANSWER
+                formData.append('detay', data.detail); // Cevap içeriği veya Durum
+                formData.append('sonuc', data.result); // BAŞARILI / HATALI
+
+                fetch(sheetConfig.value.url, {
+                    method: 'POST',
+                    body: formData,
+                    mode: 'no-cors' // Google Apps Script için zorunlu
+                }).then(() => console.log("Excel'e gönderildi"))
+                  .catch(e => console.error("Excel Hatası", e));
+            };
+
+            const saveSettings = () => {
+                sheetConfig.value.url = sheetConfig.value.inputUrl;
+                localStorage.setItem('sheetUrl', sheetConfig.value.url);
+                showSettings.value = false;
+                alert("Ayarlar kaydedildi!");
+            };
+
+            // --- TEACHER LOGIC ---
+            const setupTeacher = () => {
+                const customId = "sinif-" + Math.floor(Math.random() * 10000);
+                peer.value = new Peer(customId);
+                peer.value.on('open', (id) => {
+                    myPeerId.value = id;
+                    view.value = 'teacher-dashboard';
+                    peer.value.on('connection', (conn) => handleStudentConnection(conn));
+                });
+            };
+
+            const handleStudentConnection = (conn) => {
+                conn.on('data', (data) => {
+                    if (data.type === 'JOIN') {
+                        const newStudent = {
+                            id: conn.peer,
+                            name: data.payload.name,
+                            number: data.payload.number,
+                            conn: conn,
+                            status: 'idle'
+                        };
+                        connectedStudents.value.push(newStudent);
+                        
+                        // LOG: Katılım
+                        logToSheet({
+                            name: newStudent.name, number: newStudent.number,
+                            action: 'KATILIM', detail: 'Derse Bağlandı', result: 'BAŞARILI'
+                        });
+                    }
+                    else if (data.type === 'ANSWER') {
+                        const student = connectedStudents.value.find(s => s.id === conn.peer);
+                        if (student) validateAnswer(student, data.payload);
+                    }
+                });
+            };
+
+            const triggerAction = (type) => {
+                resetStudentScreens();
+                if (type === 'PASSWORD') {
+                    activeSecret.value = actionInputs.value.password.trim().toUpperCase();
+                    activeActionName.value = "SORU: " + activeSecret.value;
+                    broadcast({ type: 'MODE_CHANGE', mode: 'PASSWORD' });
+                } 
+                else if (type === 'ROLLCALL') {
+                    activeSecret.value = 'BURADAYIM';
+                    activeActionName.value = "YOKLAMA";
+                    broadcast({ type: 'MODE_CHANGE', mode: 'ROLLCALL' });
+                }
+            };
+
+            const validateAnswer = (student, answer) => {
+                const isCorrect = answer.trim().toUpperCase() === activeSecret.value;
+                student.status = isCorrect ? 'success' : 'fail';
+                
+                student.conn.send({
+                    type: 'FEEDBACK',
+                    success: isCorrect,
+                    msg: isCorrect ? 'Harika! Doğru.' : 'Yanlış Cevap!'
+                });
+
+                // LOG: Cevap
+                logToSheet({
+                    name: student.name, number: student.number,
+                    action: activeActionName.value, 
+                    detail: answer, 
+                    result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
+                });
+            };
+
+            const resetStudentScreens = () => {
+                currentMode.value = 'IDLE';
+                broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
+                connectedStudents.value.forEach(s => s.status = 'idle');
+            };
+
+            const broadcast = (msg) => {
+                connectedStudents.value.forEach(s => { if(s.conn && s.conn.open) s.conn.send(msg); });
+            };
+
+            const copyInviteLink = () => {
+                const url = `${window.location.protocol}//${window.location.host}${window.location.pathname}?room=${myPeerId.value}`;
+                navigator.clipboard.writeText(url);
+                alert("Link kopyalandı!");
+            };
+
+            // --- STUDENT LOGIC ---
+            const joinClass = () => {
+                if(!studentForm.value.name || !studentForm.value.roomId) return alert("Eksik bilgi");
+                isConnecting.value = true;
+                peer.value = new Peer();
+                peer.value.on('open', (id) => {
+                    const conn = peer.value.connect(studentForm.value.roomId);
+                    conn.on('open', () => {
+                        isConnecting.value = false;
+                        view.value = 'student-room';
+                        conn.send({ type: 'JOIN', payload: { name: studentForm.value.name, number: studentForm.value.number } });
+                        conn.on('data', (data) => {
+                            if (data.type === 'MODE_CHANGE') { 
+                                currentMode.value = data.mode; feedbackMessage.value = ''; studentInput.value = ''; 
+                            }
+                            else if (data.type === 'FEEDBACK') {
+                                feedbackType.value = data.success ? 'success' : 'error';
+                                feedbackMessage.value = data.msg;
+                                setTimeout(() => { if(data.success) currentMode.value = 'IDLE'; feedbackMessage.value = ''; }, 3000);
+                            }
+                        });
+                    });
+                    conn.on('error', () => { alert("Bağlantı hatası"); isConnecting.value = false; });
+                });
+            };
+
+            const submitAnswer = (val) => {
+                const finalAnswer = (typeof val === 'string') ? val : studentInput.value;
+                if(!finalAnswer) return;
+                // Peer nesnesinden bağlantıyı bul (basitleştirilmiş)
+                const conns = peer.value.connections[studentForm.value.roomId];
+                if(conns && conns[0]) conns[0].send({ type: 'ANSWER', payload: finalAnswer });
+            };
+
+            return {
+                view, setupTeacher, connectedStudents, actionInputs, triggerAction, resetStudentScreens,
+                copyInviteLink, studentForm, joinClass, isConnecting, currentMode, studentInput,
+                submitAnswer, feedbackMessage, feedbackType, showSettings, sheetConfig, saveSettings
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
