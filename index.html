@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ders Asistanı PRO V7 - Timer Edition</title>
+    <title>Ders Asistanı PRO V7 - Matris & Güvenlik</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -35,9 +35,8 @@
 
         .timer-bar { transition: width 1s linear; }
 
-        /* Widget Mode Animations */
-        .widget-enter-active, .widget-leave-active { transition: all 0.3s ease; }
-        .widget-enter-from, .widget-leave-to { opacity: 0; transform: scale(0.9); }
+        /* Offline State */
+        .student-offline { filter: grayscale(100%); opacity: 0.6; border-color: #ef4444 !important; }
     </style>
 </head>
 <body>
@@ -92,26 +91,19 @@
         
         <!-- === WIDGET MODE UI === -->
         <div v-if="isWidgetMode" class="flex flex-col h-full gap-2">
-            <!-- Top Bar: Exit & Stats -->
             <div class="flex justify-between items-center bg-slate-900/90 p-2 rounded-lg backdrop-blur border border-slate-800">
                <button @click="isWidgetMode = false" class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition">
                    <span>↖</span> Genişlet
                </button>
-               <div class="flex gap-3 text-[10px] font-black">
-                   <span class="text-emerald-400">✔ {{ stats.correct }}</span>
-                   <span class="text-rose-400">✖ {{ stats.wrong }}</span>
-                   <span class="text-amber-500">⏳ {{ stats.pending }}</span>
-               </div>
+               <div class="text-[10px] font-bold text-slate-300 truncate max-w-[100px]">{{ actionInputs.activityName }}</div>
             </div>
 
-            <!-- Timer (Mini) -->
             <div v-if="timer > 0" class="px-1">
                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                    <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
                </div>
             </div>
 
-            <!-- Action Buttons (Compact Icons) -->
             <div class="grid grid-cols-4 gap-1">
                <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Parola Sor">🔑</button>
                <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="bg-emerald-600 hover:bg-emerald-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Test (A-D)">📝</button>
@@ -119,47 +111,35 @@
                <button @click="resetStudentScreens" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-lg text-slate-300 transition shadow flex items-center justify-center" title="Sıfırla">🔄</button>
             </div>
 
-            <!-- Compact Student Grid -->
             <div class="flex-1 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-slate-800/50">
                <div class="flex flex-wrap gap-1 content-start">
                    <div v-for="student in connectedStudents" :key="student.id" 
                         class="w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold cursor-help relative group transition-all shadow-sm"
-                        :class="{
-                           'bg-slate-800 text-slate-500 border border-slate-700': student.status === 'idle',
-                           'bg-emerald-500 text-white border-emerald-400': student.status === 'success',
-                           'bg-rose-500 text-white border-rose-400': student.status === 'fail',
-                           'bg-amber-500 text-black border-amber-400': student.status === 'timeout',
-                           'bg-indigo-500 animate-pulse text-white': student.status === 'pending'
-                        }">
+                        :class="[
+                           studentClass(student),
+                           !student.isOnline ? 'student-offline' : ''
+                        ]">
                        
-                       <!-- Hand Raise Dot -->
-                       <div v-if="student.handRaised" class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-bounce shadow border border-yellow-600"></div>
-                       
-                       {{ student.name.substring(0,1).toUpperCase() }}
+                       <!-- Offline/Online Dot -->
+                       <div class="absolute -top-1 -left-1 w-2 h-2 rounded-full border border-slate-900" 
+                            :class="student.isOnline ? 'bg-green-500' : 'bg-red-500'"></div>
 
-                       <!-- Tooltip -->
-                       <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-950 text-white text-[10px] rounded border border-slate-700 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-20 shadow-xl">
-                           {{ student.name }}
-                           <div class="text-[8px] opacity-60">{{ student.number }}</div>
-                       </div>
+                       {{ student.name.substring(0,1).toUpperCase() }}
                    </div>
                </div>
-               <div v-if="connectedStudents.length === 0" class="text-center text-[10px] text-slate-600 mt-4">Öğrenci yok</div>
             </div>
         </div>
 
-
         <!-- === NORMAL MODE UI === -->
         <div v-else class="flex flex-col h-full">
-            <!-- Header -->
             <header class="flex flex-wrap justify-between items-center gap-4 mb-8">
                 <div>
                     <h1 class="text-3xl font-black">{{ classInfo.name }}</h1>
                     <div class="flex items-center gap-4 mt-2">
                         <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-bold border border-indigo-500/20">ID: {{ myPeerId }}</span>
                         <span class="flex items-center gap-2 text-xs text-slate-400">
-                            <span class="w-2 h-2 rounded-full" :class="connectedStudents.length > 0 ? 'bg-emerald-500' : 'bg-slate-500'"></span>
-                            {{ connectedStudents.length }} Öğrenci Bağlı
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            {{ connectedStudents.filter(s => s.isOnline).length }} Online / {{ connectedStudents.length }} Toplam
                         </span>
                     </div>
                 </div>
@@ -167,17 +147,13 @@
                     <button @click="isWidgetMode = true" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl border border-indigo-500 transition shadow-lg flex items-center gap-2 font-bold text-sm">
                         📱 <span class="hidden sm:inline">Widget Modu</span>
                     </button>
-                    <button @click="showReportModal = true; fetchReport()" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">📊 Rapor</button>
                     <button @click="showSettings = true" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">⚙️</button>
                     <button @click="copyInviteLink" class="bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl font-bold text-sm border border-slate-700 transition">🔗 Paylaş</button>
                 </div>
             </header>
 
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-                <!-- Sidebar: Controls -->
                 <div class="lg:col-span-3 space-y-4">
-                    
-                    <!-- Timer Display (Active Mode) -->
                     <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
                         <div class="text-center">
                             <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
@@ -188,16 +164,23 @@
                         </div>
                     </div>
 
-                    <!-- Controls -->
                     <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
-                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Aktiflik & Parola</h3>
-                        <p class="text-[10px] text-slate-500 mb-4">Başlatıldığında 10 saniye süre verilir. Cevaplamayanlar kaydedilir.</p>
+                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Etkinlik Detayları</h3>
                         <div class="space-y-3">
+                            <!-- ETKİNLİK ADI INPUTU -->
                             <div class="relative">
-                                <input v-model="actionInputs.password" type="text" placeholder="Parola (Örn: 1453)" 
-                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Etkinlik Adı (Excel Sütunu)</label>
+                                <input v-model="actionInputs.activityName" type="text" placeholder="Örn: Soru 1" 
+                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none font-bold text-white">
                             </div>
-                            <div class="flex gap-2">
+                            
+                            <div class="relative">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Parola (Varsa)</label>
+                                <input v-model="actionInputs.password" type="text" placeholder="Örn: 1453" 
+                                       class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
+                            </div>
+
+                            <div class="flex gap-2 pt-2">
                                 <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
                                 <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
                             </div>
@@ -205,7 +188,6 @@
                     </div>
 
                     <div class="glass-panel p-6 rounded-3xl">
-                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Hızlı Aksiyonlar</h3>
                         <div class="grid grid-cols-1 gap-2">
                             <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
                             <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
@@ -213,14 +195,13 @@
                     </div>
                 </div>
 
-                <!-- Main: Student Grid -->
                 <div class="lg:col-span-9 glass-panel rounded-3xl flex flex-col overflow-hidden">
                     <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
-                        <span class="text-sm font-bold text-slate-400 uppercase">Sınıf Durumu</span>
+                        <span class="text-sm font-bold text-slate-400 uppercase">Sınıf Listesi ({{ connectedStudents.length }})</span>
                         <div class="flex gap-4 text-xs font-bold">
                             <span class="text-emerald-400">Doğru: {{ stats.correct }}</span>
                             <span class="text-rose-400">Yanlış: {{ stats.wrong }}</span>
-                            <span class="text-amber-500">Girmeyen: {{ stats.timeout }}</span>
+                            <span class="text-amber-500">Zaman Aşımı: {{ stats.timeout }}</span>
                         </div>
                     </div>
 
@@ -231,17 +212,24 @@
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
                             <div v-for="student in connectedStudents" :key="student.id" 
-                                class="student-card p-4 rounded-2xl border relative overflow-hidden group"
-                                :class="studentClass(student)">
+                                 class="student-card p-4 rounded-2xl border relative overflow-hidden group"
+                                 :class="[
+                                    studentClass(student),
+                                    !student.isOnline ? 'student-offline' : ''
+                                 ]">
                                 
-                                <!-- Parmak kaldırma ikonu -->
-                                <div v-if="student.handRaised" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
+                                <!-- Connection Status Indicator -->
+                                <div class="absolute top-2 right-2 w-3 h-3 rounded-full border-2 border-slate-900 transition-colors duration-300 shadow-sm z-20"
+                                     :class="student.isOnline ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'"></div>
 
-                                <div class="text-xs font-bold truncate pr-4">{{ student.name }}</div>
+                                <div v-if="student.handRaised && student.isOnline" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
+
+                                <div class="text-xs font-bold truncate pr-6">{{ student.name }}</div>
                                 <div class="text-[10px] text-slate-500 font-mono mb-2">{{ student.number }}</div>
                                 
                                 <div class="text-[10px] font-black uppercase mt-auto">
-                                    <span v-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
+                                    <span v-if="!student.isOnline" class="text-red-400">🔴 OFFLINE</span>
+                                    <span v-else-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
                                     <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
                                     <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
                                     <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
@@ -255,23 +243,14 @@
         </div>
     </div>
 
-    <!-- STUDENT VIEW -->
+    <!-- STUDENT LOGIN / ROOM (Değişmedi, sadece logic güncellendi) -->
     <div v-if="view === 'student-login'" class="flex-1 flex items-center justify-center animate__animated animate__fadeIn">
         <div class="glass-panel p-8 rounded-3xl w-full max-w-md">
             <h2 class="text-2xl font-bold mb-6 text-center">Derse Katıl</h2>
             <div class="space-y-4">
-                <div>
-                    <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Ad Soyad</label>
-                    <input v-model="studentForm.name" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:border-indigo-500 outline-none">
-                </div>
-                <div>
-                    <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Okul Numarası</label>
-                    <input v-model="studentForm.number" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:border-indigo-500 outline-none">
-                </div>
-                <div v-if="!urlRoomId">
-                    <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Oda Kodu</label>
-                    <input v-model="studentForm.roomId" type="text" placeholder="ders-xxxxx" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-mono text-sm focus:border-indigo-500 outline-none">
-                </div>
+                <input v-model="studentForm.name" type="text" placeholder="Ad Soyad" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:border-indigo-500 outline-none">
+                <input v-model="studentForm.number" type="text" placeholder="Okul No" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:border-indigo-500 outline-none">
+                <input v-if="!urlRoomId" v-model="studentForm.roomId" type="text" placeholder="Oda Kodu" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-mono text-sm focus:border-indigo-500 outline-none">
                 <button @click="joinClass" :disabled="isConnecting" class="w-full btn-indigo py-4 rounded-xl font-bold flex items-center justify-center gap-2">
                     <span v-if="isConnecting" class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                     {{ isConnecting ? 'BAĞLANILIYOR...' : 'GİRİŞ YAP' }}
@@ -280,7 +259,6 @@
         </div>
     </div>
 
-    <!-- STUDENT ROOM -->
     <div v-if="view === 'student-room'" class="flex-1 flex flex-col max-w-md mx-auto w-full animate__animated animate__zoomIn">
         <div class="glass-panel p-4 rounded-2xl mb-4 flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -298,26 +276,22 @@
         </div>
 
         <div class="flex-1 glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
-            
-            <!-- Timer Bar for Student -->
             <div v-if="currentMode !== 'IDLE' && timer > 0" class="absolute top-0 left-0 w-full h-2 bg-slate-800">
                 <div class="h-full bg-indigo-500 timer-bar" :style="{width: (timer * 10) + '%'}"></div>
             </div>
-            <div v-if="currentMode !== 'IDLE' && timer > 0" class="absolute top-4 right-4 text-2xl font-black text-slate-500 opacity-50">
-                {{ timer }}
-            </div>
+            <div v-if="currentMode !== 'IDLE' && timer > 0" class="absolute top-4 right-4 text-2xl font-black text-slate-500 opacity-50">{{ timer }}</div>
 
             <!-- Mode: IDLE -->
             <div v-if="currentMode === 'IDLE'" class="animate__animated animate__fadeIn">
                 <div class="text-6xl mb-4 animate-pulse">📡</div>
                 <h2 class="text-xl font-bold">Hoca Bekleniyor</h2>
-                <p class="text-sm text-slate-500 mt-2">Soru başladığında burada görünecek.</p>
+                <p class="text-sm text-slate-500 mt-2">Ekranı kapatmayın.</p>
             </div>
 
             <!-- Mode: PASSWORD -->
             <div v-if="currentMode === 'PASSWORD'" class="w-full animate__animated animate__bounceIn">
                 <h3 class="text-indigo-400 font-black mb-6 tracking-widest">PAROLAYI GİRİN</h3>
-                <input v-model="studentInput" @input="notifyTyping" type="text" placeholder="Hocanın söylediği..." class="w-full bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 text-center text-xl md:text-3xl font-black focus:border-indigo-500 outline-none mb-6 uppercase">
+                <input v-model="studentInput" @input="notifyTyping" type="text" placeholder="..." class="w-full bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 text-center text-xl font-black focus:border-indigo-500 outline-none mb-6 uppercase">
                 <button @click="submitAnswer" class="w-full btn-indigo py-5 rounded-2xl font-bold text-xl shadow-xl">GÖNDER</button>
             </div>
 
@@ -335,12 +309,9 @@
             <!-- Mode: ROLLCALL -->
             <div v-if="currentMode === 'ROLLCALL'" class="w-full animate__animated animate__tada">
                 <h3 class="text-2xl font-black mb-10 text-emerald-400">YOKLAMA!</h3>
-                <button @click="submitAnswer('BURADAYIM')" class="w-48 h-48 rounded-full bg-emerald-600 border-8 border-emerald-400/30 shadow-[0_0_50px_rgba(16,185,129,0.3)] flex items-center justify-center text-2xl font-black transition-all transform active:scale-90">
-                    BURADA
-                </button>
+                <button @click="submitAnswer('BURADAYIM')" class="w-48 h-48 rounded-full bg-emerald-600 border-8 border-emerald-400/30 shadow-[0_0_50px_rgba(16,185,129,0.3)] flex items-center justify-center text-2xl font-black transition-all transform active:scale-90">BURADA</button>
             </div>
 
-            <!-- Feedback Overlay -->
             <div v-if="feedback.show" class="absolute inset-0 z-50 flex flex-col items-center justify-center animate__animated animate__fadeIn" :class="feedback.success ? 'bg-emerald-950/95' : 'bg-rose-950/95'">
                 <div class="text-8xl mb-4">{{ feedback.success ? '🎉' : '✖' }}</div>
                 <div class="text-2xl font-black uppercase">{{ feedback.msg }}</div>
@@ -348,11 +319,10 @@
         </div>
     </div>
 
-    <!-- MODALS (Settings, Report) -->
+    <!-- Modals (Settings) -->
     <div v-if="showSettings" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
         <div class="glass-panel p-8 rounded-3xl max-w-md w-full border border-slate-700">
             <h2 class="text-2xl font-bold mb-2">Ayarlar</h2>
-            <p class="text-sm text-slate-500 mb-6">Google Sheets Apps Script URL'sini buraya yapıştırın.</p>
             <input v-model="sheetConfig.inputUrl" type="text" placeholder="https://script.google.com/macros/s/..." 
                    class="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-xs font-mono outline-none focus:border-indigo-500 mb-6">
             <div class="flex gap-2">
@@ -361,7 +331,6 @@
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
@@ -387,17 +356,17 @@
                 setTimeout(() => { notification.value.show = false; }, 3000);
             };
 
-            // Teacher
+            // Teacher Data
             const classInfo = ref({ name: '' });
             const connectedStudents = ref([]);
-            const actionInputs = ref({ password: '' });
+            // Added activityName to inputs
+            const actionInputs = ref({ password: '', activityName: 'Soru 1' });
             const activeSecret = ref('');
             const activeActionType = ref('');
             const showSettings = ref(false);
             const sheetConfig = ref({ url: '', inputUrl: '' });
-            const showReportModal = ref(false);
 
-            // Student
+            // Student Data
             const studentForm = ref({ name: '', number: '', roomId: '' });
             const isConnecting = ref(false);
             const currentMode = ref('IDLE');
@@ -405,7 +374,7 @@
             const handCooldown = ref(false);
             const feedback = ref({ show: false, success: false, msg: '' });
 
-            // Computed Stats
+            // Stats
             const stats = computed(() => {
                 return {
                     correct: connectedStudents.value.filter(s => s.status === 'success').length,
@@ -432,58 +401,95 @@
                     view.value = 'teacher-dashboard';
                     peer.value.on('connection', (conn) => {
                         conn.on('data', (data) => handleIncomingData(conn, data));
+                        
+                        // CONNECTION DROP LOGIC
                         conn.on('close', () => {
-                            connectedStudents.value = connectedStudents.value.filter(s => s.id !== conn.peer);
+                             // Find student and mark offline instead of removing
+                             const student = connectedStudents.value.find(s => s.id === conn.peer);
+                             if(student) {
+                                 student.isOnline = false;
+                                 notify(`${student.name} düştü!`, 'error');
+                             }
+                        });
+                        
+                        conn.on('error', () => {
+                             const student = connectedStudents.value.find(s => s.id === conn.peer);
+                             if(student) student.isOnline = false;
                         });
                     });
                 });
             };
 
             const handleIncomingData = (conn, data) => {
-                const student = connectedStudents.value.find(s => s.id === conn.peer);
+                if (data.type === 'JOIN') {
+                    // DUPLICATE CHECK
+                    const existingStudent = connectedStudents.value.find(s => s.number === data.payload.number);
+                    
+                    if (existingStudent) {
+                        if (existingStudent.isOnline) {
+                            // If someone is already online with this number, reject new connection
+                            conn.send({ type: 'FEEDBACK', success: false, msg: 'BU NUMARA ZATEN BAĞLI!' });
+                            setTimeout(() => conn.close(), 1000);
+                            return;
+                        } else {
+                            // If student was offline, allow reconnect and update ID
+                            existingStudent.isOnline = true;
+                            existingStudent.id = conn.peer;
+                            existingStudent.conn = conn;
+                            existingStudent.name = data.payload.name; // Update name just in case
+                            
+                            // Re-bind close event to new connection
+                            conn.on('close', () => { existingStudent.isOnline = false; });
+                            return;
+                        }
+                    }
 
-                switch(data.type) {
-                    case 'JOIN':
-                        if(!student) {
-                            connectedStudents.value.push({
-                                id: conn.peer, name: data.payload.name, number: data.payload.number,
-                                conn, status: 'idle', handRaised: false
-                            });
-                        }
-                        break;
-                    case 'TYPING':
-                        if(student && student.status !== 'success' && student.status !== 'fail' && student.status !== 'timeout') {
-                            student.status = 'pending';
-                        }
-                        break;
-                    case 'ANSWER':
-                        if(student && timer.value > 0) validateAnswer(student, data.payload);
-                        break;
-                    case 'HAND_RAISE':
-                        if(student) {
+                    // New Student
+                    connectedStudents.value.push({
+                        id: conn.peer, 
+                        name: data.payload.name, 
+                        number: data.payload.number,
+                        conn, 
+                        status: 'idle', 
+                        handRaised: false,
+                        isOnline: true
+                    });
+                }
+                else {
+                    const student = connectedStudents.value.find(s => s.id === conn.peer);
+                    if (!student) return;
+
+                    switch(data.type) {
+                        case 'TYPING':
+                            if(student.status !== 'success' && student.status !== 'fail' && student.status !== 'timeout') {
+                                student.status = 'pending';
+                            }
+                            break;
+                        case 'ANSWER':
+                            if(timer.value > 0) validateAnswer(student, data.payload);
+                            break;
+                        case 'HAND_RAISE':
                             student.handRaised = true;
                             setTimeout(() => { student.handRaised = false; }, 5000);
-                        }
-                        break;
+                            break;
+                    }
                 }
             };
 
             const triggerAction = (type) => {
                 if(type === 'PASSWORD' && !actionInputs.value.password) return notify("Lütfen bir parola girin", "error");
+                if(!actionInputs.value.activityName) return notify("Lütfen etkinlik adı girin", "error");
 
                 activeActionType.value = type;
                 activeSecret.value = actionInputs.value.password.trim().toUpperCase();
                 connectedStudents.value.forEach(s => { s.status = 'idle'; s.handRaised = false; });
                 
-                // Start Timer
                 timer.value = 10;
                 broadcast({ type: 'MODE_CHANGE', mode: type, duration: 10 });
 
                 if(timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(() => {
                     timer.value--;
-                    // Broadcast timer sync occasionally if needed, but client handles own countdown mostly
-                    
                     if(timer.value <= 0) {
                         clearInterval(timerInterval);
                         finalizeTimeout();
@@ -493,15 +499,15 @@
 
             const finalizeTimeout = () => {
                 connectedStudents.value.forEach(s => {
-                    if (s.status === 'idle' || s.status === 'pending') {
+                    if ((s.status === 'idle' || s.status === 'pending') && s.isOnline) {
                         s.status = 'timeout';
                         if(s.conn && s.conn.open) {
                             s.conn.send({ type: 'FEEDBACK', success: false, msg: 'SÜRE DOLDU!' });
                         }
-                        // Log Timeout
                         logToSheet({
                             name: s.name, number: s.number,
-                            action: activeActionType.value, detail: 'ZAMAN AŞIMI', result: 'GİRMEDİ'
+                            action: actionInputs.value.activityName, // Use Activity Name
+                            detail: 'ZAMAN AŞIMI', result: 'GİRMEDİ'
                         });
                     }
                 });
@@ -509,7 +515,10 @@
                 setTimeout(() => {
                    broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
                    notify("Süre doldu, sonuçlar kaydedildi.");
-                }, 2000); // Wait 2 sec so they see "Süre Doldu"
+                   
+                   // Auto increment activity name? Optional
+                   // actionInputs.value.activityName = incrementName(actionInputs.value.activityName);
+                }, 2000);
             };
 
             const validateAnswer = (student, answer) => {
@@ -524,10 +533,10 @@
                     });
                 }
                 
-                // Log to Excel
                 logToSheet({
                     name: student.name, number: student.number,
-                    action: activeActionType.value, detail: answer, result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
+                    action: actionInputs.value.activityName, // Use Activity Name
+                    detail: answer, result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
                 });
             };
 
@@ -541,9 +550,7 @@
 
             // --- STUDENT SIDE ---
             const joinClass = () => {
-                if(!studentForm.value.name || !studentForm.value.roomId) {
-                    return notify("Lütfen tüm alanları doldurun", "error");
-                }
+                if(!studentForm.value.name || !studentForm.value.roomId) return notify("Lütfen tüm alanları doldurun", "error");
                 
                 isConnecting.value = true;
                 peer.value = new Peer();
@@ -560,7 +567,6 @@
                                 studentInput.value = '';
                                 feedback.value.show = false;
                                 
-                                // Start client side timer sync
                                 if(data.mode !== 'IDLE' && data.duration) {
                                     timer.value = data.duration;
                                     if(timerInterval) clearInterval(timerInterval);
@@ -575,14 +581,21 @@
 
                             } else if (data.type === 'FEEDBACK') {
                                 feedback.value = { show: true, success: data.success, msg: data.msg };
-                                // Don't reset mode immediately if success, wait for timer or teacher
+                                if(!data.success && data.msg === 'BU NUMARA ZATEN BAĞLI!') {
+                                    setTimeout(() => { location.reload(); }, 2000);
+                                }
                             }
+                        });
+                        
+                        // Handle server disconnect on student side
+                        conn.on('close', () => {
+                            notify("Bağlantı kesildi! Sayfayı yenileyin.", "error");
                         });
                     });
 
                     conn.on('error', () => {
                         isConnecting.value = false;
-                        notify("Hocaya bağlanılamadı. Kodun doğruluğunu kontrol edin.", "error");
+                        notify("Hocaya bağlanılamadı.", "error");
                     });
                 });
             };
@@ -608,7 +621,6 @@
                 }
             };
 
-            // --- HELPERS ---
             const studentClass = (s) => {
                 return {
                     'bg-slate-900 border-slate-800': s.status === 'idle',
@@ -620,7 +632,6 @@
 
             const copyInviteLink = () => {
                 const url = `${window.location.origin}${window.location.pathname}?room=${myPeerId.value}`;
-                
                 const textArea = document.createElement("textarea");
                 textArea.value = url;
                 textArea.style.position = "fixed";
@@ -629,18 +640,9 @@
                 document.body.appendChild(textArea);
                 textArea.focus();
                 textArea.select();
-                
                 try {
-                    const successful = document.execCommand('copy');
-                    if (successful) {
-                        notify("Davet linki kopyalandı!");
-                    } else {
-                        notify("Kopyalanamadı!", "error");
-                    }
-                } catch (err) {
-                    notify("Hata: Link kopyalanamadı", "error");
-                }
-                
+                    document.execCommand('copy') ? notify("Link kopyalandı!") : notify("Kopyalanamadı!", "error");
+                } catch (err) { notify("Hata", "error"); }
                 document.body.removeChild(textArea);
             };
 
@@ -658,7 +660,7 @@
                 formData.append('sinifAdi', classInfo.value.name);
                 formData.append('ogrenciAd', data.name);
                 formData.append('ogrenciNo', data.number);
-                formData.append('islem', data.action);
+                formData.append('islem', data.action); // Now sends Activity Name
                 formData.append('detay', data.detail);
                 formData.append('sonuc', data.result);
                 fetch(sheetConfig.value.url, { method: 'POST', body: formData, mode: 'no-cors' });
