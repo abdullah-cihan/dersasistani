@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ders Asistanı PRO V7 - Interactive</title>
+    <title>Ders Asistanı PRO V7 - Timer Edition</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -32,6 +32,8 @@
             z-index: 9999;
             pointer-events: none;
         }
+
+        .timer-bar { transition: width 1s linear; }
     </style>
 </head>
 <body>
@@ -105,16 +107,30 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
             <!-- Sidebar: Controls -->
             <div class="lg:col-span-3 space-y-4">
+                
+                <!-- Timer Display (Active Mode) -->
+                <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
+                    <div class="text-center">
+                        <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
+                        <div class="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Saniye Kaldı</div>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full mt-4 overflow-hidden">
+                        <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
                 <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
-                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Soru Kontrolü</h3>
+                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Aktiflik & Parola</h3>
+                    <p class="text-[10px] text-slate-500 mb-4">Başlatıldığında 10 saniye süre verilir. Cevaplamayanlar kaydedilir.</p>
                     <div class="space-y-3">
                         <div class="relative">
-                            <input v-model="actionInputs.password" type="text" placeholder="Cevap Anahtarı" 
+                            <input v-model="actionInputs.password" type="text" placeholder="Parola (Örn: 1453)" 
                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
                         </div>
                         <div class="flex gap-2">
-                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold">KLASİK SORU</button>
-                            <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition">TEST (A-D)</button>
+                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
+                            <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
                         </div>
                     </div>
                 </div>
@@ -122,7 +138,7 @@
                 <div class="glass-panel p-6 rounded-3xl">
                     <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Hızlı Aksiyonlar</h3>
                     <div class="grid grid-cols-1 gap-2">
-                        <button @click="triggerAction('ROLLCALL')" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700">YOKLAMA BAŞLAT</button>
+                        <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
                         <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
                     </div>
                 </div>
@@ -135,7 +151,7 @@
                     <div class="flex gap-4 text-xs font-bold">
                         <span class="text-emerald-400">Doğru: {{ stats.correct }}</span>
                         <span class="text-rose-400">Yanlış: {{ stats.wrong }}</span>
-                        <span class="text-slate-400">Bekleyen: {{ stats.pending }}</span>
+                        <span class="text-amber-500">Girmeyen: {{ stats.timeout }}</span>
                     </div>
                 </div>
 
@@ -158,7 +174,8 @@
                             <div class="text-[10px] font-black uppercase mt-auto">
                                 <span v-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
                                 <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
-                                <span v-else-if="student.status === 'pending'" class="text-amber-400 animate-pulse">... GİRİYOR</span>
+                                <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
+                                <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
                                 <span v-else class="opacity-20">BEKLEMEDE</span>
                             </div>
                         </div>
@@ -211,6 +228,15 @@
         </div>
 
         <div class="flex-1 glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
+            
+            <!-- Timer Bar for Student -->
+            <div v-if="currentMode !== 'IDLE' && timer > 0" class="absolute top-0 left-0 w-full h-2 bg-slate-800">
+                <div class="h-full bg-indigo-500 timer-bar" :style="{width: (timer * 10) + '%'}"></div>
+            </div>
+            <div v-if="currentMode !== 'IDLE' && timer > 0" class="absolute top-4 right-4 text-2xl font-black text-slate-500 opacity-50">
+                {{ timer }}
+            </div>
+
             <!-- Mode: IDLE -->
             <div v-if="currentMode === 'IDLE'" class="animate__animated animate__fadeIn">
                 <div class="text-6xl mb-4 animate-pulse">📡</div>
@@ -220,8 +246,8 @@
 
             <!-- Mode: PASSWORD -->
             <div v-if="currentMode === 'PASSWORD'" class="w-full animate__animated animate__bounceIn">
-                <h3 class="text-indigo-400 font-black mb-6 tracking-widest">CEVABI GİRİN</h3>
-                <input v-model="studentInput" @input="notifyTyping" type="text" class="w-full bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 text-center text-3xl font-black focus:border-indigo-500 outline-none mb-6 uppercase">
+                <h3 class="text-indigo-400 font-black mb-6 tracking-widest">PAROLAYI GİRİN</h3>
+                <input v-model="studentInput" @input="notifyTyping" type="text" placeholder="Hocanın söylediği..." class="w-full bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 text-center text-xl md:text-3xl font-black focus:border-indigo-500 outline-none mb-6 uppercase">
                 <button @click="submitAnswer" class="w-full btn-indigo py-5 rounded-2xl font-bold text-xl shadow-xl">GÖNDER</button>
             </div>
 
@@ -279,6 +305,10 @@
             const isBroadcasting = ref(false);
             const urlRoomId = ref('');
 
+            // TIMER LOGIC
+            const timer = ref(0);
+            let timerInterval = null;
+
             // UI Notifications
             const notification = ref({ show: false, msg: '', type: 'success' });
             const notify = (msg, type = 'success') => {
@@ -309,6 +339,7 @@
                 return {
                     correct: connectedStudents.value.filter(s => s.status === 'success').length,
                     wrong: connectedStudents.value.filter(s => s.status === 'fail').length,
+                    timeout: connectedStudents.value.filter(s => s.status === 'timeout').length,
                     pending: connectedStudents.value.filter(s => s.status === 'pending').length
                 }
             });
@@ -350,10 +381,12 @@
                         }
                         break;
                     case 'TYPING':
-                        if(student) student.status = 'pending';
+                        if(student && student.status !== 'success' && student.status !== 'fail' && student.status !== 'timeout') {
+                            student.status = 'pending';
+                        }
                         break;
                     case 'ANSWER':
-                        if(student) validateAnswer(student, data.payload);
+                        if(student && timer.value > 0) validateAnswer(student, data.payload);
                         break;
                     case 'HAND_RAISE':
                         if(student) {
@@ -365,11 +398,47 @@
             };
 
             const triggerAction = (type) => {
+                if(type === 'PASSWORD' && !actionInputs.value.password) return notify("Lütfen bir parola girin", "error");
+
                 activeActionType.value = type;
                 activeSecret.value = actionInputs.value.password.trim().toUpperCase();
                 connectedStudents.value.forEach(s => { s.status = 'idle'; s.handRaised = false; });
                 
-                broadcast({ type: 'MODE_CHANGE', mode: type });
+                // Start Timer
+                timer.value = 10;
+                broadcast({ type: 'MODE_CHANGE', mode: type, duration: 10 });
+
+                if(timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    timer.value--;
+                    // Broadcast timer sync occasionally if needed, but client handles own countdown mostly
+                    
+                    if(timer.value <= 0) {
+                        clearInterval(timerInterval);
+                        finalizeTimeout();
+                    }
+                }, 1000);
+            };
+
+            const finalizeTimeout = () => {
+                connectedStudents.value.forEach(s => {
+                    if (s.status === 'idle' || s.status === 'pending') {
+                        s.status = 'timeout';
+                        if(s.conn && s.conn.open) {
+                            s.conn.send({ type: 'FEEDBACK', success: false, msg: 'SÜRE DOLDU!' });
+                        }
+                        // Log Timeout
+                        logToSheet({
+                            name: s.name, number: s.number,
+                            action: activeActionType.value, detail: 'ZAMAN AŞIMI', result: 'GİRMEDİ'
+                        });
+                    }
+                });
+                
+                setTimeout(() => {
+                   broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
+                   notify("Süre doldu, sonuçlar kaydedildi.");
+                }, 2000); // Wait 2 sec so they see "Süre Doldu"
             };
 
             const validateAnswer = (student, answer) => {
@@ -419,9 +488,23 @@
                                 currentMode.value = data.mode;
                                 studentInput.value = '';
                                 feedback.value.show = false;
+                                
+                                // Start client side timer sync
+                                if(data.mode !== 'IDLE' && data.duration) {
+                                    timer.value = data.duration;
+                                    if(timerInterval) clearInterval(timerInterval);
+                                    timerInterval = setInterval(() => {
+                                        timer.value--;
+                                        if(timer.value <= 0) clearInterval(timerInterval);
+                                    }, 1000);
+                                } else {
+                                    if(timerInterval) clearInterval(timerInterval);
+                                    timer.value = 0;
+                                }
+
                             } else if (data.type === 'FEEDBACK') {
                                 feedback.value = { show: true, success: data.success, msg: data.msg };
-                                setTimeout(() => { feedback.value.show = false; currentMode.value = 'IDLE'; }, 3000);
+                                // Don't reset mode immediately if success, wait for timer or teacher
                             }
                         });
                     });
@@ -460,14 +543,13 @@
                     'bg-slate-900 border-slate-800': s.status === 'idle',
                     'bg-emerald-500/10 border-emerald-500/50': s.status === 'success',
                     'bg-rose-500/10 border-rose-500/50': s.status === 'fail',
-                    'bg-amber-500/10 border-amber-500/50': s.status === 'pending'
+                    'bg-amber-500/10 border-amber-500/50': s.status === 'pending' || s.status === 'timeout'
                 }
             };
 
             const copyInviteLink = () => {
                 const url = `${window.location.origin}${window.location.pathname}?room=${myPeerId.value}`;
                 
-                // Compatibility Fallback for restricted environments
                 const textArea = document.createElement("textarea");
                 textArea.value = url;
                 textArea.style.position = "fixed";
@@ -522,7 +604,7 @@
                 saveSettings, copyInviteLink, studentForm, isConnecting, joinClass,
                 currentMode, studentInput, notifyTyping, submitAnswer, feedback,
                 raiseHand, handCooldown, resetStudentScreens, urlRoomId,
-                notification
+                notification, timer
             };
         }
     }).mount('#app');
