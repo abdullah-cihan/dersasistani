@@ -140,14 +140,13 @@
                         </div>
                         
                         <div class="relative">
-                            <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Parola (Varsa)</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase ml-1">Parola (Sadece Soru İçin)</label>
                             <input v-model="actionInputs.password" type="text" placeholder="Örn: 1453" 
                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
                         </div>
 
-                        <div class="flex gap-2 pt-2">
-                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
-                            <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
+                        <div class="pt-2">
+                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="w-full btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
                         </div>
                     </div>
                 </div>
@@ -155,7 +154,7 @@
                 <!-- Quick Actions -->
                 <div class="glass-panel p-6 rounded-3xl">
                     <div class="grid grid-cols-1 gap-2">
-                        <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
+                        <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-emerald-700 hover:bg-emerald-600 py-3 rounded-xl text-xs font-bold transition border border-emerald-600 disabled:opacity-50">YOKLAMA BAŞLAT</button>
                         <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
                     </div>
                 </div>
@@ -164,7 +163,7 @@
                 <div class="glass-panel p-6 rounded-3xl">
                     <h3 class="text-sm font-bold text-slate-400 uppercase mb-3">Anlık Durum</h3>
                     <div class="space-y-2 text-sm font-bold">
-                         <div class="flex justify-between"><span class="text-emerald-400">Doğru:</span> <span>{{ stats.correct }}</span></div>
+                         <div class="flex justify-between"><span class="text-emerald-400">Doğru/Var:</span> <span>{{ stats.correct }}</span></div>
                          <div class="flex justify-between"><span class="text-rose-400">Yanlış:</span> <span>{{ stats.wrong }}</span></div>
                          <div class="flex justify-between"><span class="text-amber-500">Zaman Aşımı:</span> <span>{{ stats.timeout }}</span></div>
                     </div>
@@ -212,7 +211,9 @@
                             
                             <div class="text-[10px] font-black uppercase mt-auto">
                                 <span v-if="!student.isOnline" class="text-red-400">🔴 OFFLINE</span>
-                                <span v-else-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
+                                <span v-else-if="student.status === 'success'" class="text-emerald-400">
+                                    {{ activeActionType === 'ROLLCALL' ? '✔ VAR' : '✔ DOĞRU' }}
+                                </span>
                                 <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
                                 <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
                                 <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
@@ -303,17 +304,6 @@
                 <h3 class="text-indigo-400 font-black mb-6 tracking-widest">PAROLAYI GİRİN</h3>
                 <input v-model="studentInput" @input="notifyTyping" type="text" placeholder="..." class="w-full bg-slate-950 border-2 border-indigo-500/30 rounded-2xl p-6 text-center text-xl font-black focus:border-indigo-500 outline-none mb-6 uppercase">
                 <button @click="submitAnswer" class="w-full btn-indigo py-5 rounded-2xl font-bold text-xl shadow-xl">GÖNDER</button>
-            </div>
-
-            <!-- Mode: QUIZ -->
-            <div v-if="currentMode === 'QUIZ'" class="w-full animate__animated animate__fadeInUp">
-                <h3 class="text-emerald-400 font-black mb-8 tracking-widest uppercase">Doğru Şıkkı Seçin</h3>
-                <div class="grid grid-cols-2 gap-4 w-full">
-                    <button v-for="opt in ['A','B','C','D']" :key="opt" @click="submitAnswer(opt)" 
-                            class="py-8 rounded-2xl bg-slate-800 border-2 border-slate-700 hover:border-emerald-500 hover:bg-emerald-500/10 text-3xl font-black transition-all transform active:scale-95">
-                        {{ opt }}
-                    </button>
-                </div>
             </div>
 
             <!-- Mode: ROLLCALL -->
@@ -489,7 +479,14 @@
                 if(!actionInputs.value.activityName) return notify("Lütfen etkinlik adı girin", "error");
 
                 activeActionType.value = type;
-                activeSecret.value = actionInputs.value.password.trim().toUpperCase();
+                
+                // --- ROLLCALL LOGIC CHANGE ---
+                if (type === 'ROLLCALL') {
+                    activeSecret.value = 'BURADAYIM'; // Auto set secret for rollcall
+                } else {
+                    activeSecret.value = actionInputs.value.password.trim().toUpperCase();
+                }
+
                 connectedStudents.value.forEach(s => { s.status = 'idle'; s.handRaised = false; });
                 
                 timer.value = 10;
@@ -523,7 +520,6 @@
                 setTimeout(() => {
                    broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
                    notify("Süre doldu, sonuçlar kaydedildi.");
-                   // Otomatik yenileme isterseniz buraya fetchReport() ekleyebilirsiniz
                 }, 2000);
             };
 
@@ -531,18 +527,27 @@
                 const isCorrect = answer.trim().toUpperCase() === activeSecret.value;
                 student.status = isCorrect ? 'success' : 'fail';
                 
+                // Customize feedback msg based on type
+                let msg = isCorrect ? 'TEBRİKLER! DOĞRU' : 'MAALESEF YANLIŞ';
+                let excelResult = isCorrect ? 'DOĞRU' : 'YANLIŞ';
+
+                if (activeActionType.value === 'ROLLCALL') {
+                    msg = isCorrect ? 'YOKLAMADA VARSINIZ' : 'HATA';
+                    excelResult = isCorrect ? 'VAR' : 'YOK';
+                }
+
                 if(student.conn && student.conn.open) {
                     student.conn.send({ 
                         type: 'FEEDBACK', 
                         success: isCorrect, 
-                        msg: isCorrect ? 'TEBRİKLER! DOĞRU' : 'MAALESEF YANLIŞ' 
+                        msg: msg
                     });
                 }
                 
                 logToSheet({
                     name: student.name, number: student.number,
                     action: actionInputs.value.activityName,
-                    detail: answer, result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
+                    detail: answer, result: excelResult
                 });
             };
 
@@ -699,7 +704,7 @@
                 saveSettings, copyInviteLink, studentForm, isConnecting, joinClass,
                 currentMode, studentInput, notifyTyping, submitAnswer, feedback,
                 raiseHand, handCooldown, resetStudentScreens, urlRoomId,
-                notification, timer, activeTab, fetchReport, reportData, isFetchingReport
+                notification, timer, activeTab, fetchReport, reportData, isFetchingReport, activeActionType
             };
         }
     }).mount('#app');
