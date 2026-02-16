@@ -34,11 +34,15 @@
         }
 
         .timer-bar { transition: width 1s linear; }
+
+        /* Widget Mode Animations */
+        .widget-enter-active, .widget-leave-active { transition: all 0.3s ease; }
+        .widget-enter-from, .widget-leave-to { opacity: 0; transform: scale(0.9); }
     </style>
 </head>
 <body>
 
-<div id="app" class="min-h-screen flex flex-col p-4 md:p-8">
+<div id="app" class="min-h-screen flex flex-col p-4 md:p-8 transition-all duration-300" :class="{'!p-2': isWidgetMode}">
 
     <!-- Notifications Toast -->
     <div v-if="notification.show" class="toast-notification animate__animated animate__fadeInUp">
@@ -84,99 +88,165 @@
     </div>
 
     <!-- TEACHER DASHBOARD -->
-    <div v-if="view === 'teacher-dashboard'" class="flex-1 flex flex-col max-w-7xl mx-auto w-full animate__animated animate__fadeIn">
-        <!-- Header -->
-        <header class="flex flex-wrap justify-between items-center gap-4 mb-8">
-            <div>
-                <h1 class="text-3xl font-black">{{ classInfo.name }}</h1>
-                <div class="flex items-center gap-4 mt-2">
-                    <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-bold border border-indigo-500/20">ID: {{ myPeerId }}</span>
-                    <span class="flex items-center gap-2 text-xs text-slate-400">
-                        <span class="w-2 h-2 rounded-full" :class="connectedStudents.length > 0 ? 'bg-emerald-500' : 'bg-slate-500'"></span>
-                        {{ connectedStudents.length }} Öğrenci Bağlı
-                    </span>
-                </div>
+    <div v-if="view === 'teacher-dashboard'" class="flex-1 flex flex-col w-full animate__animated animate__fadeIn" :class="isWidgetMode ? 'max-w-full h-screen overflow-hidden' : 'max-w-7xl mx-auto'">
+        
+        <!-- === WIDGET MODE UI === -->
+        <div v-if="isWidgetMode" class="flex flex-col h-full gap-2">
+            <!-- Top Bar: Exit & Stats -->
+            <div class="flex justify-between items-center bg-slate-900/90 p-2 rounded-lg backdrop-blur border border-slate-800">
+               <button @click="isWidgetMode = false" class="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400 hover:text-white flex items-center gap-1 transition">
+                   <span>↖</span> Genişlet
+               </button>
+               <div class="flex gap-3 text-[10px] font-black">
+                   <span class="text-emerald-400">✔ {{ stats.correct }}</span>
+                   <span class="text-rose-400">✖ {{ stats.wrong }}</span>
+                   <span class="text-amber-500">⏳ {{ stats.pending }}</span>
+               </div>
             </div>
-            <div class="flex gap-2">
-                <button @click="showReportModal = true; fetchReport()" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">📊 Rapor</button>
-                <button @click="showSettings = true" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">⚙️</button>
-                <button @click="copyInviteLink" class="btn-indigo px-6 py-3 rounded-xl font-bold text-sm">🔗 Linki Paylaş</button>
-            </div>
-        </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-            <!-- Sidebar: Controls -->
-            <div class="lg:col-span-3 space-y-4">
-                
-                <!-- Timer Display (Active Mode) -->
-                <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
-                    <div class="text-center">
-                        <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
-                        <div class="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Saniye Kaldı</div>
-                    </div>
-                    <div class="w-full bg-slate-800 h-2 rounded-full mt-4 overflow-hidden">
-                        <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
+            <!-- Timer (Mini) -->
+            <div v-if="timer > 0" class="px-1">
+               <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                   <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
+               </div>
+            </div>
+
+            <!-- Action Buttons (Compact Icons) -->
+            <div class="grid grid-cols-4 gap-1">
+               <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Parola Sor">🔑</button>
+               <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="bg-emerald-600 hover:bg-emerald-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Test (A-D)">📝</button>
+               <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="bg-blue-600 hover:bg-blue-500 p-3 rounded-lg text-lg text-white disabled:opacity-50 transition shadow flex items-center justify-center" title="Yoklama">📢</button>
+               <button @click="resetStudentScreens" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-lg text-slate-300 transition shadow flex items-center justify-center" title="Sıfırla">🔄</button>
+            </div>
+
+            <!-- Compact Student Grid -->
+            <div class="flex-1 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-slate-800/50">
+               <div class="flex flex-wrap gap-1 content-start">
+                   <div v-for="student in connectedStudents" :key="student.id" 
+                        class="w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold cursor-help relative group transition-all shadow-sm"
+                        :class="{
+                           'bg-slate-800 text-slate-500 border border-slate-700': student.status === 'idle',
+                           'bg-emerald-500 text-white border-emerald-400': student.status === 'success',
+                           'bg-rose-500 text-white border-rose-400': student.status === 'fail',
+                           'bg-amber-500 text-black border-amber-400': student.status === 'timeout',
+                           'bg-indigo-500 animate-pulse text-white': student.status === 'pending'
+                        }">
+                       
+                       <!-- Hand Raise Dot -->
+                       <div v-if="student.handRaised" class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-bounce shadow border border-yellow-600"></div>
+                       
+                       {{ student.name.substring(0,1).toUpperCase() }}
+
+                       <!-- Tooltip -->
+                       <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-950 text-white text-[10px] rounded border border-slate-700 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-20 shadow-xl">
+                           {{ student.name }}
+                           <div class="text-[8px] opacity-60">{{ student.number }}</div>
+                       </div>
+                   </div>
+               </div>
+               <div v-if="connectedStudents.length === 0" class="text-center text-[10px] text-slate-600 mt-4">Öğrenci yok</div>
+            </div>
+        </div>
+
+
+        <!-- === NORMAL MODE UI === -->
+        <div v-else class="flex flex-col h-full">
+            <!-- Header -->
+            <header class="flex flex-wrap justify-between items-center gap-4 mb-8">
+                <div>
+                    <h1 class="text-3xl font-black">{{ classInfo.name }}</h1>
+                    <div class="flex items-center gap-4 mt-2">
+                        <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-bold border border-indigo-500/20">ID: {{ myPeerId }}</span>
+                        <span class="flex items-center gap-2 text-xs text-slate-400">
+                            <span class="w-2 h-2 rounded-full" :class="connectedStudents.length > 0 ? 'bg-emerald-500' : 'bg-slate-500'"></span>
+                            {{ connectedStudents.length }} Öğrenci Bağlı
+                        </span>
                     </div>
                 </div>
+                <div class="flex gap-2">
+                    <button @click="isWidgetMode = true" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl border border-indigo-500 transition shadow-lg flex items-center gap-2 font-bold text-sm">
+                        📱 <span class="hidden sm:inline">Widget Modu</span>
+                    </button>
+                    <button @click="showReportModal = true; fetchReport()" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">📊 Rapor</button>
+                    <button @click="showSettings = true" class="bg-slate-800 hover:bg-slate-700 p-3 rounded-xl border border-slate-700 transition">⚙️</button>
+                    <button @click="copyInviteLink" class="bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl font-bold text-sm border border-slate-700 transition">🔗 Paylaş</button>
+                </div>
+            </header>
 
-                <!-- Controls -->
-                <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
-                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Aktiflik & Parola</h3>
-                    <p class="text-[10px] text-slate-500 mb-4">Başlatıldığında 10 saniye süre verilir. Cevaplamayanlar kaydedilir.</p>
-                    <div class="space-y-3">
-                        <div class="relative">
-                            <input v-model="actionInputs.password" type="text" placeholder="Parola (Örn: 1453)" 
-                                   class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
+                <!-- Sidebar: Controls -->
+                <div class="lg:col-span-3 space-y-4">
+                    
+                    <!-- Timer Display (Active Mode) -->
+                    <div v-if="timer > 0" class="glass-panel p-6 rounded-3xl bg-indigo-900/40 border-indigo-500 animate__animated animate__pulse animate__infinite">
+                        <div class="text-center">
+                            <div class="text-4xl font-black text-white mb-1">{{ timer }}</div>
+                            <div class="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Saniye Kaldı</div>
                         </div>
-                        <div class="flex gap-2">
-                            <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
-                            <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
+                        <div class="w-full bg-slate-800 h-2 rounded-full mt-4 overflow-hidden">
+                            <div class="bg-indigo-500 h-full timer-bar" :style="{width: (timer * 10) + '%'}"></div>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="glass-panel p-6 rounded-3xl border-l-4 border-indigo-500">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Aktiflik & Parola</h3>
+                        <p class="text-[10px] text-slate-500 mb-4">Başlatıldığında 10 saniye süre verilir. Cevaplamayanlar kaydedilir.</p>
+                        <div class="space-y-3">
+                            <div class="relative">
+                                <input v-model="actionInputs.password" type="text" placeholder="Parola (Örn: 1453)" 
+                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-indigo-500 outline-none uppercase font-mono">
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="triggerAction('PASSWORD')" :disabled="isBroadcasting || timer > 0" class="flex-1 btn-indigo py-3 rounded-xl text-xs font-bold disabled:opacity-50">PAROLA SOR</button>
+                                <button @click="triggerAction('QUIZ')" :disabled="isBroadcasting || timer > 0" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50">TEST (A-D)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-3xl">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Hızlı Aksiyonlar</h3>
+                        <div class="grid grid-cols-1 gap-2">
+                            <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
+                            <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="glass-panel p-6 rounded-3xl">
-                    <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-tighter">Hızlı Aksiyonlar</h3>
-                    <div class="grid grid-cols-1 gap-2">
-                        <button @click="triggerAction('ROLLCALL')" :disabled="isBroadcasting || timer > 0" class="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xs font-bold transition border border-slate-700 disabled:opacity-50">YOKLAMA BAŞLAT</button>
-                        <button @click="resetStudentScreens" class="w-full text-slate-500 hover:text-white py-2 text-xs transition">Tüm Ekranları Sıfırla</button>
+                <!-- Main: Student Grid -->
+                <div class="lg:col-span-9 glass-panel rounded-3xl flex flex-col overflow-hidden">
+                    <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
+                        <span class="text-sm font-bold text-slate-400 uppercase">Sınıf Durumu</span>
+                        <div class="flex gap-4 text-xs font-bold">
+                            <span class="text-emerald-400">Doğru: {{ stats.correct }}</span>
+                            <span class="text-rose-400">Yanlış: {{ stats.wrong }}</span>
+                            <span class="text-amber-500">Girmeyen: {{ stats.timeout }}</span>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Main: Student Grid -->
-            <div class="lg:col-span-9 glass-panel rounded-3xl flex flex-col overflow-hidden">
-                <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
-                    <span class="text-sm font-bold text-slate-400 uppercase">Sınıf Durumu</span>
-                    <div class="flex gap-4 text-xs font-bold">
-                        <span class="text-emerald-400">Doğru: {{ stats.correct }}</span>
-                        <span class="text-rose-400">Yanlış: {{ stats.wrong }}</span>
-                        <span class="text-amber-500">Girmeyen: {{ stats.timeout }}</span>
-                    </div>
-                </div>
+                    <div class="p-6 overflow-y-auto flex-1">
+                        <div v-if="connectedStudents.length === 0" class="h-full flex flex-col items-center justify-center text-slate-600">
+                            <div class="text-6xl mb-4 opacity-20">📡</div>
+                            <p>Öğrenci bekleniyor...</p>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                            <div v-for="student in connectedStudents" :key="student.id" 
+                                class="student-card p-4 rounded-2xl border relative overflow-hidden group"
+                                :class="studentClass(student)">
+                                
+                                <!-- Parmak kaldırma ikonu -->
+                                <div v-if="student.handRaised" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
 
-                <div class="p-6 overflow-y-auto flex-1">
-                    <div v-if="connectedStudents.length === 0" class="h-full flex flex-col items-center justify-center text-slate-600">
-                        <div class="text-6xl mb-4 opacity-20">📡</div>
-                        <p>Öğrenci bekleniyor...</p>
-                    </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                        <div v-for="student in connectedStudents" :key="student.id" 
-                             class="student-card p-4 rounded-2xl border relative overflow-hidden group"
-                             :class="studentClass(student)">
-                            
-                            <!-- Parmak kaldırma ikonu -->
-                            <div v-if="student.handRaised" class="absolute -top-1 -right-1 bg-yellow-500 p-2 rounded-bl-xl animate-bounce shadow-lg z-10">✋</div>
-
-                            <div class="text-xs font-bold truncate pr-4">{{ student.name }}</div>
-                            <div class="text-[10px] text-slate-500 font-mono mb-2">{{ student.number }}</div>
-                            
-                            <div class="text-[10px] font-black uppercase mt-auto">
-                                <span v-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
-                                <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
-                                <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
-                                <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
-                                <span v-else class="opacity-20">BEKLEMEDE</span>
+                                <div class="text-xs font-bold truncate pr-4">{{ student.name }}</div>
+                                <div class="text-[10px] text-slate-500 font-mono mb-2">{{ student.number }}</div>
+                                
+                                <div class="text-[10px] font-black uppercase mt-auto">
+                                    <span v-if="student.status === 'success'" class="text-emerald-400">✔ DOĞRU</span>
+                                    <span v-else-if="student.status === 'fail'" class="text-rose-400">✖ YANLIŞ</span>
+                                    <span v-else-if="student.status === 'timeout'" class="text-amber-500">⚠ GİRMEDİ</span>
+                                    <span v-else-if="student.status === 'pending'" class="text-indigo-400 animate-pulse">... YAZIYOR</span>
+                                    <span v-else class="opacity-20">BEKLEMEDE</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -304,6 +374,7 @@
             const myPeerId = ref('');
             const isBroadcasting = ref(false);
             const urlRoomId = ref('');
+            const isWidgetMode = ref(false);
 
             // TIMER LOGIC
             const timer = ref(0);
@@ -604,7 +675,7 @@
                 saveSettings, copyInviteLink, studentForm, isConnecting, joinClass,
                 currentMode, studentInput, notifyTyping, submitAnswer, feedback,
                 raiseHand, handCooldown, resetStudentScreens, urlRoomId,
-                notification, timer
+                notification, timer, isWidgetMode
             };
         }
     }).mount('#app');
