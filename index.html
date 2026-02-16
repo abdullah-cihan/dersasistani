@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ders Asistanı PRO V5 - Büyük Sınıflar İçin</title>
+    <title>Ders Asistanı PRO V6 - Raporlu</title>
     
     <!-- Kütüphaneler -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -18,11 +18,15 @@
         .btn-primary { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); transition: all 0.2s; }
         .btn-primary:active { transform: scale(0.98); }
         
-        /* Liste Performansı İçin */
         .student-grid { contain: content; } 
         
         .loader { border: 3px solid #f3f3f3; border-top: 3px solid #6366f1; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Tablo Stilleri */
+        .report-table th { position: sticky; top: 0; background: #1e293b; z-index: 10; }
+        .report-table tr:nth-child(even) { background-color: rgba(255,255,255,0.03); }
+        .report-table tr:hover { background-color: rgba(99, 102, 241, 0.1); }
     </style>
 </head>
 <body>
@@ -38,8 +42,8 @@
             <h2 class="text-2xl font-bold mb-4">Öğretmen Girişi</h2>
             
             <div class="w-full text-left mb-4">
-                <label class="text-xs text-slate-400 ml-1">Sınıf / Ders Adı Girin</label>
-                <input v-model="classInfo.name" type="text" placeholder="Örn: Hukuk 101 - Amfi A" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-indigo-500 outline-none">
+                <label class="text-xs text-slate-400 ml-1">Sınıf / Ders Adı (Excel Sekme Adı Olacak)</label>
+                <input v-model="classInfo.name" type="text" placeholder="Örn: Tlab202" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-indigo-500 outline-none">
             </div>
 
             <button @click="setupTeacher" :disabled="!classInfo.name" class="w-full btn-primary py-3 rounded-lg text-sm font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
@@ -67,18 +71,21 @@
                 <div class="flex items-center gap-3 text-xs text-slate-400">
                     <span class="flex items-center gap-1">
                         <span class="w-2 h-2 rounded-full" :class="sheetConfig.url ? 'bg-green-500' : 'bg-red-500'"></span>
-                        {{ sheetConfig.url ? 'Excel Kaydı Aktif' : 'Excel Bağlı Değil' }}
+                        {{ sheetConfig.url ? 'Excel Bağlı' : 'Excel Yok' }}
                     </span>
                     <span class="text-slate-600">|</span>
                     <span>ID: {{ myPeerId }}</span>
                 </div>
             </div>
             <div class="flex gap-3">
+                <button @click="showReportModal = true; fetchReport()" class="bg-indigo-900 hover:bg-indigo-800 text-indigo-200 border border-indigo-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2">
+                    📊 Raporu Görüntüle
+                </button>
                 <button @click="showSettings = true" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2">
-                    ⚙️ Excel Ayarı
+                    ⚙️ Ayarlar
                 </button>
                 <button @click="copyInviteLink" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 transform active:scale-95 transition">
-                    🔗 Linki Kopyala & Paylaş
+                    🔗 Link Paylaş
                 </button>
             </div>
         </div>
@@ -89,7 +96,7 @@
             <div class="glass-panel p-5 rounded-2xl lg:col-span-1 flex flex-col gap-4 overflow-y-auto">
                 <div class="bg-indigo-900/20 p-4 rounded-xl border border-indigo-500/20">
                     <h3 class="text-xs font-bold text-indigo-300 uppercase mb-3">Soru Gönder</h3>
-                    <input v-model="actionInputs.password" type="text" placeholder="Doğru Cevap (Örn: 1453)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm mb-2 focus:border-indigo-500 outline-none uppercase font-mono">
+                    <input v-model="actionInputs.password" type="text" placeholder="Cevap (Örn: 1453)" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm mb-2 focus:border-indigo-500 outline-none uppercase font-mono">
                     <button @click="triggerAction('PASSWORD')" :disabled="!actionInputs.password || isBroadcasting" class="w-full btn-primary py-3 rounded-lg text-sm font-bold flex justify-center items-center gap-2">
                         <span v-if="isBroadcasting" class="loader !w-4 !h-4"></span>
                         <span>{{ isBroadcasting ? 'Gönderiliyor...' : 'Soruyu Başlat' }}</span>
@@ -111,18 +118,15 @@
                 </div>
             </div>
 
-            <!-- Sağ: Öğrenci Grid (Performans Odaklı) -->
+            <!-- Sağ: Öğrenci Grid -->
             <div class="glass-panel p-5 rounded-2xl lg:col-span-3 flex flex-col overflow-hidden">
                 <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-700">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
                         BAĞLI ÖĞRENCİLER (<span class="text-white text-base">{{ connectedStudents.length }}</span>)
                     </h3>
-                    <div class="text-[10px] text-slate-500">
-                        Canlı Bağlantı Kalitesi: <span class="text-green-400">İyi</span>
-                    </div>
+                    <div class="text-[10px] text-slate-500">Durum: <span class="text-green-400">Aktif</span></div>
                 </div>
                 
-                <!-- Sanal Scroll benzeri yapı için basit grid -->
                 <div class="flex-1 overflow-y-auto student-grid pr-2">
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
                         <div v-for="student in connectedStudents" :key="student.id" 
@@ -148,7 +152,7 @@
         </div>
     </div>
 
-    <!-- Ayarlar Modalı (Excel) -->
+    <!-- Excel URL Ayarları Modalı -->
     <div v-if="showSettings" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
         <div class="glass-panel p-6 rounded-2xl max-w-lg w-full">
             <h2 class="text-xl font-bold mb-2">Excel Rapor Bağlantısı</h2>
@@ -161,8 +165,53 @@
         </div>
     </div>
 
+    <!-- Rapor Görüntüleme Modalı (YENİ) -->
+    <div v-if="showReportModal" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+        <div class="glass-panel p-0 rounded-2xl max-w-5xl w-full h-[80vh] flex flex-col overflow-hidden">
+            <!-- Modal Header -->
+            <div class="p-4 border-b border-slate-700 bg-slate-900 flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <span>📊 {{ classInfo.name }} - Canlı Rapor</span>
+                    <button @click="fetchReport" class="text-xs bg-indigo-600 px-2 py-1 rounded ml-2 hover:bg-indigo-500">Yenile</button>
+                </h2>
+                <button @click="showReportModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
+            </div>
 
-    <!-- ================= ÖĞRENCİ PANELİ (Basitleştirilmiş) ================= -->
+            <!-- Modal Body (Table) -->
+            <div class="flex-1 overflow-auto bg-slate-900/50 p-4">
+                <div v-if="isFetchingReport" class="flex justify-center items-center h-full">
+                    <div class="loader !w-8 !h-8"></div>
+                </div>
+                
+                <table v-else-if="reportData.length > 0" class="w-full text-left text-xs report-table border-collapse">
+                    <thead>
+                        <tr class="text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th v-for="(header, index) in reportData[0]" :key="index" class="p-3">{{ header }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                        <tr v-for="(row, rowIndex) in reportData.slice(1)" :key="rowIndex" class="hover:bg-indigo-900/20 transition">
+                            <td v-for="(cell, cellIndex) in row" :key="cellIndex" class="p-3 font-mono text-slate-300">
+                                {{ cell }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div v-else class="text-center text-slate-500 mt-20">
+                    <div class="text-4xl mb-2">📂</div>
+                    <p>Bu sınıf için henüz kayıt bulunamadı veya Excel bağlı değil.</p>
+                </div>
+            </div>
+            
+            <div class="p-2 bg-slate-900 border-t border-slate-700 text-[10px] text-slate-500 text-center">
+                Veriler Google Sheets'ten çekilmektedir.
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================= ÖĞRENCİ PANELİ ================= -->
     <div v-if="view === 'student-login'" class="w-full max-w-md animate__animated animate__fadeIn">
         <div class="glass-panel p-8 rounded-2xl text-center">
             <h2 class="text-2xl font-bold mb-6">Derse Katıl</h2>
@@ -177,8 +226,7 @@
                 <input v-model="studentForm.number" type="text" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-indigo-500 outline-none">
             </div>
 
-            <!-- Ders Kodu (Gizli veya URL'den) -->
-            <input v-if="!urlRoomId" v-model="studentForm.roomId" type="text" placeholder="Ders Kodu (Link yoksa girin)" class="w-full bg-slate-800 border border-slate-700 rounded p-2 mb-6 text-center font-mono text-xs text-slate-400">
+            <input v-if="!urlRoomId" v-model="studentForm.roomId" type="text" placeholder="Ders Kodu" class="w-full bg-slate-800 border border-slate-700 rounded p-2 mb-6 text-center font-mono text-xs text-slate-400">
 
             <button @click="joinClass" :disabled="isConnecting" class="w-full btn-primary py-3 rounded-lg font-bold flex items-center justify-center gap-2">
                 <span v-if="isConnecting" class="loader !w-4 !h-4 !border-white !border-t-transparent"></span>
@@ -197,8 +245,6 @@
         </div>
 
         <div class="flex-1 glass-panel rounded-2xl p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-2xl">
-            
-            <!-- Bekleme -->
             <div v-if="currentMode === 'IDLE'" class="text-center animate__animated animate__fadeIn">
                 <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                     <span class="text-3xl">📡</span>
@@ -207,14 +253,12 @@
                 <p class="text-xs text-slate-500 mt-2">Ekranı kapatmayın.</p>
             </div>
 
-            <!-- Şifre Giriş -->
             <div v-if="currentMode === 'PASSWORD'" class="w-full text-center animate__animated animate__bounceIn">
                 <h3 class="text-lg font-bold mb-4 text-indigo-400">Cevabı Girin</h3>
                 <input v-model="studentInput" type="text" class="w-full bg-slate-950 border border-indigo-500 rounded-xl p-4 text-center text-xl uppercase mb-6 text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner" placeholder="...">
                 <button @click="submitAnswer" class="w-full btn-primary py-4 rounded-xl font-bold text-lg shadow-lg transform active:scale-95 transition">GÖNDER</button>
             </div>
 
-            <!-- Yoklama -->
             <div v-if="currentMode === 'ROLLCALL'" class="w-full text-center animate__animated animate__tada">
                 <h3 class="text-2xl font-bold mb-8 text-green-400">YOKLAMA ZAMANI!</h3>
                 <button @click="submitAnswer('BURADAYIM')" class="w-48 h-48 rounded-full bg-gradient-to-b from-green-500 to-green-700 border-4 border-green-400 shadow-[0_0_50px_rgba(34,197,94,0.4)] flex items-center justify-center text-xl font-bold mx-auto transition transform active:scale-90 hover:scale-105">
@@ -222,7 +266,6 @@
                 </button>
             </div>
 
-            <!-- Bildirim -->
             <div v-if="feedbackMessage" class="absolute inset-0 bg-slate-900/95 z-20 flex flex-col items-center justify-center animate__animated animate__fadeIn">
                 <div class="text-6xl mb-4">{{ feedbackType === 'success' ? '🎉' : '❌' }}</div>
                 <h3 class="text-xl font-bold text-center px-4" :class="feedbackType === 'success' ? 'text-green-400' : 'text-red-400'">{{ feedbackMessage }}</h3>
@@ -241,7 +284,7 @@
             const view = ref('landing');
             const peer = ref(null);
             const myPeerId = ref('');
-            const isBroadcasting = ref(false); // UI kilidi için
+            const isBroadcasting = ref(false);
             const urlRoomId = ref('');
 
             // Teacher
@@ -252,6 +295,11 @@
             const activeActionName = ref('');
             const showSettings = ref(false);
             const sheetConfig = ref({ url: '', inputUrl: '' });
+            
+            // Report State
+            const showReportModal = ref(false);
+            const reportData = ref([]);
+            const isFetchingReport = ref(false);
 
             // Student
             const studentForm = ref({ name: '', number: '', roomId: '' });
@@ -264,22 +312,18 @@
             onMounted(() => {
                 const urlParams = new URLSearchParams(window.location.search);
                 const room = urlParams.get('room');
-                if (room) { 
-                    studentForm.value.roomId = room; 
-                    urlRoomId.value = room;
-                    view.value = 'student-login'; 
-                }
+                if (room) { studentForm.value.roomId = room; urlRoomId.value = room; view.value = 'student-login'; }
                 const savedUrl = localStorage.getItem('sheetUrl');
                 if(savedUrl) { sheetConfig.value.url = savedUrl; sheetConfig.value.inputUrl = savedUrl; }
             });
 
-            // --- EXCEL LOGGING (UPDATED V5) ---
+            // --- EXCEL LOGIC (POST & GET) ---
             const logToSheet = (data) => {
                 if (!sheetConfig.value.url) return;
                 
                 const formData = new FormData();
                 formData.append('tarih', new Date().toLocaleString('tr-TR'));
-                formData.append('sinifAdi', classInfo.value.name); // Sınıf Adı Eklendi
+                formData.append('sinifAdi', classInfo.value.name);
                 formData.append('ogrenciAd', data.name);
                 formData.append('ogrenciNo', data.number);
                 formData.append('islem', data.action); 
@@ -290,32 +334,51 @@
                 .catch(e => console.error("Log Error", e));
             };
 
+            const fetchReport = async () => {
+                if (!sheetConfig.value.url) return alert("Önce Excel URL'sini ayarlardan girin.");
+                
+                isFetchingReport.value = true;
+                reportData.value = [];
+                
+                try {
+                    // doGet'e parametre gönder
+                    const url = `${sheetConfig.value.url}?sinifAdi=${encodeURIComponent(classInfo.value.name)}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if(data.error) alert(data.error);
+                    else reportData.value = data;
+                } catch (e) {
+                    console.error("Rapor Çekme Hatası:", e);
+                    alert("Rapor çekilemedi. Apps Script URL'sinin 'Herkes'e açık olduğundan emin olun.");
+                } finally {
+                    isFetchingReport.value = false;
+                }
+            };
+
             const saveSettings = () => {
                 sheetConfig.value.url = sheetConfig.value.inputUrl;
                 localStorage.setItem('sheetUrl', sheetConfig.value.url);
                 showSettings.value = false;
             };
 
-            // --- TEACHER LOGIC (SCALABLE BROADCAST) ---
+            // --- TEACHER LOGIC ---
             const setupTeacher = () => {
                 if(!classInfo.value.name) return;
                 const customId = "ders-" + Math.floor(Math.random() * 100000);
-                peer.value = new Peer(customId); // Public Cloud Server
+                peer.value = new Peer(customId);
                 
                 peer.value.on('open', (id) => {
                     myPeerId.value = id;
                     view.value = 'teacher-dashboard';
-                    
                     peer.value.on('connection', (conn) => {
                         conn.on('data', (data) => handleData(conn, data));
-                        conn.on('close', () => { /* Kopan öğrenciyi yönet */ });
                     });
                 });
             };
 
             const handleData = (conn, data) => {
                 if (data.type === 'JOIN') {
-                    // Aynı ID varsa güncelle, yoksa ekle
                     const existing = connectedStudents.value.find(s => s.id === conn.peer);
                     if (!existing) {
                         const newStudent = {
@@ -335,29 +398,21 @@
                 }
             };
 
-            // --- OPTIMIZED BROADCAST (CHUNKING) ---
-            // 200 kişiye aynı anda send() yapmak tarayıcıyı dondurabilir.
-            // Bu fonksiyon mesajları 20'şerli paketler halinde 50ms arayla gönderir.
             const broadcast = async (msg) => {
                 isBroadcasting.value = true;
                 const chunkSize = 20;
                 const students = connectedStudents.value;
-                
                 for (let i = 0; i < students.length; i += chunkSize) {
                     const chunk = students.slice(i, i + chunkSize);
-                    chunk.forEach(s => {
-                        if(s.conn && s.conn.open) s.conn.send(msg);
-                    });
-                    // UI'ın nefes alması için bekle
+                    chunk.forEach(s => { if(s.conn && s.conn.open) s.conn.send(msg); });
                     await new Promise(r => setTimeout(r, 50));
                 }
                 isBroadcasting.value = false;
             };
 
             const triggerAction = (type) => {
-                // UI Sıfırla
                 connectedStudents.value.forEach(s => s.status = 'idle');
-                broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' }); // Önce temizle
+                broadcast({ type: 'MODE_CHANGE', mode: 'IDLE' });
 
                 setTimeout(() => {
                     if (type === 'PASSWORD') {
@@ -370,26 +425,18 @@
                         activeActionName.value = "YOKLAMA";
                         broadcast({ type: 'MODE_CHANGE', mode: 'ROLLCALL' });
                     }
-                }, 300); // Küçük gecikme
+                }, 300);
             };
 
             const validateAnswer = (student, answer) => {
                 const isCorrect = answer.trim().toUpperCase() === activeSecret.value;
                 student.status = isCorrect ? 'success' : 'fail';
-                
                 if(student.conn && student.conn.open) {
-                    student.conn.send({
-                        type: 'FEEDBACK',
-                        success: isCorrect,
-                        msg: isCorrect ? 'Harika! Doğru.' : 'Yanlış Cevap!'
-                    });
+                    student.conn.send({ type: 'FEEDBACK', success: isCorrect, msg: isCorrect ? 'Harika! Doğru.' : 'Yanlış Cevap!' });
                 }
-
                 logToSheet({
                     name: student.name, number: student.number,
-                    action: activeActionName.value, 
-                    detail: answer, 
-                    result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
+                    action: activeActionName.value, detail: answer, result: isCorrect ? 'DOĞRU' : 'YANLIŞ'
                 });
             };
 
@@ -408,64 +455,39 @@
             const joinClass = () => {
                 if(!studentForm.value.name || !studentForm.value.roomId) return alert("Bilgileri giriniz");
                 isConnecting.value = true;
-                
-                // Öğrenci için ID oluştur
                 peer.value = new Peer(); 
-                
                 peer.value.on('open', (id) => {
                     const conn = peer.value.connect(studentForm.value.roomId);
-                    
                     conn.on('open', () => {
                         isConnecting.value = false;
                         view.value = 'student-room';
-                        
-                        // Sadece Ad ve Numara gönderiliyor (Sınıf Adını Hoca Biliyor)
-                        conn.send({ 
-                            type: 'JOIN', 
-                            payload: { name: studentForm.value.name, number: studentForm.value.number } 
-                        });
-
+                        conn.send({ type: 'JOIN', payload: { name: studentForm.value.name, number: studentForm.value.number } });
                         conn.on('data', (data) => {
-                            if (data.type === 'MODE_CHANGE') { 
-                                currentMode.value = data.mode; 
-                                feedbackMessage.value = ''; 
-                                studentInput.value = ''; 
-                            }
+                            if (data.type === 'MODE_CHANGE') { currentMode.value = data.mode; feedbackMessage.value = ''; studentInput.value = ''; }
                             else if (data.type === 'FEEDBACK') {
                                 feedbackType.value = data.success ? 'success' : 'error';
                                 feedbackMessage.value = data.msg;
-                                setTimeout(() => { 
-                                    if(data.success) currentMode.value = 'IDLE'; 
-                                    feedbackMessage.value = ''; 
-                                }, 3000);
+                                setTimeout(() => { if(data.success) currentMode.value = 'IDLE'; feedbackMessage.value = ''; }, 3000);
                             }
                         });
                     });
-
-                    conn.on('error', (err) => {
-                        console.error(err);
-                        alert("Hocaya bağlanılamadı. Kodun doğru olduğundan emin olun.");
-                        isConnecting.value = false;
-                    });
+                    conn.on('error', () => { alert("Hocaya bağlanılamadı."); isConnecting.value = false; });
                 });
             };
 
             const submitAnswer = (val) => {
                 const finalAnswer = (typeof val === 'string') ? val : studentInput.value;
                 if(!finalAnswer) return;
-                
-                // Bağlantıyı bul ve gönder
                 const conns = peer.value.connections[studentForm.value.roomId];
-                if(conns && conns[0]) {
-                    conns[0].send({ type: 'ANSWER', payload: finalAnswer });
-                }
+                if(conns && conns[0]) conns[0].send({ type: 'ANSWER', payload: finalAnswer });
             };
 
             return {
                 view, setupTeacher, connectedStudents, classInfo, actionInputs, triggerAction, 
                 resetStudentScreens, copyInviteLink, studentForm, joinClass, isConnecting, 
                 currentMode, studentInput, submitAnswer, feedbackMessage, feedbackType, 
-                showSettings, sheetConfig, saveSettings, myPeerId, isBroadcasting, urlRoomId
+                showSettings, sheetConfig, saveSettings, myPeerId, isBroadcasting, urlRoomId,
+                showReportModal, reportData, fetchReport, isFetchingReport
             };
         }
     }).mount('#app');
